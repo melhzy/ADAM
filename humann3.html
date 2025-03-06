@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUMAnN3 Pathway Abundance Viewer</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HUMAnN3 Pathway Abundance Viewer</h1>
+        </header>
+        
+        <div class="file-upload-section">
+            <div class="file-upload-container">
+                <label for="csv-file-upload" class="file-upload-label">
+                    <span id="file-upload-text">Choose CSV file</span>
+                    <span class="file-upload-button">Browse</span>
+                </label>
+                <input type="file" id="csv-file-upload" accept=".csv,.tsv,.txt" />
+            </div>
+            <div id="file-status" class="file-status"></div>
+        </div>
+        
+        <div class="app-content" id="app-content" style="display: none;">
+            <div class="controls">
+                <div class="search-bar">
+                    <input type="text" id="search-input" placeholder="Search pathway...">
+                    <button id="search-btn">Search</button>
+                    <button id="reset-btn">Reset</button>
+                </div>
+                
+                <div class="filter-options">
+                    <label for="pathway-filter">Filter by type:</label>
+                    <select id="pathway-filter">
+                        <option value="all">All Pathways</option>
+                        <option value="UNINTEGRATED">UNINTEGRATED</option>
+                        <option value="UNMAPPED">UNMAPPED</option>
+                        <option value="PWY">MetaCyc Pathways</option>
+                    </select>
+                    
+                    <label for="sort-by">Sort by:</label>
+                    <select id="sort-by">
+                        <option value="index">Path ID</option>
+                        <option value="name">Path Name</option>
+                        <option value="abundance">Abundance</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="stats-panel" id="stats-panel">
+                <div class="stat-box">
+                    <div class="stat-title">Total Pathways</div>
+                    <div class="stat-value" id="total-pathways">-</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-title">Samples</div>
+                    <div class="stat-value" id="total-samples">-</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-title">MetaCyc Pathways</div>
+                    <div class="stat-value" id="metacyc-pathways">-</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-title">Unmapped</div>
+                    <div class="stat-value" id="unmapped-percent">-</div>
+                </div>
+            </div>
+            
+            <div class="main-content">
+                <div class="pathway-list" id="pathway-list">
+                    <div class="loading">Loading data...</div>
+                </div>
+                
+                <div class="pathway-detail" id="pathway-detail">
+                    <div class="no-selection">
+                        <p>Select a pathway to view abundance across samples</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="visualization-panel" id="visualization-panel" style="display: none;">
+                <h3>Pathway Abundance Visualization</h3>
+                <div class="chart-container">
+                    <canvas id="abundance-chart"></canvas>
+                </div>
+                <div class="chart-options">
+                    <label for="chart-type">Chart Type:</label>
+                    <select id="chart-type">
+                        <option value="bar">Bar Chart</option>
+                        <option value="line">Line Chart</option>
+                        <option value="radar">Radar Chart</option>
+                    </select>
+                    <label for="sample-limit">Sample Limit:</label>
+                    <select id="sample-limit">
+                        <option value="10">10 Samples</option>
+                        <option value="20" selected>20 Samples</option>
+                        <option value="50">50 Samples</option>
+                        <option value="100">100 Samples</option>
+                        <option value="all">All Samples</option>
+                    </select>
+                    <button id="download-btn" class="action-btn">Download Data</button>
+                </div>
+            </div>
+            
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+    
+    <!-- Load main script first -->
+    <script src="script/jquery.js"></script>
+    <!-- Load fixes after main script -->
+    <script src="script/fixes.js"></script>
+</body>
+</html>
