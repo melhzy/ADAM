@@ -5,14 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HUMAnN3 Pathway Abundance Viewer</title>
     <link rel="stylesheet" href="css/style.css">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <!-- OPTIMIZATION: Load scripts asynchronously and defer rendering -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js" defer></script>
+    <!-- OPTIMIZATION: Only load Chart.js when needed -->
+    <script>
+        // Preload indicator to show the app is loading
+        window.addEventListener('DOMContentLoaded', function() {
+            // Show a loading message until everything is ready
+            document.getElementById('app-loading-status').style.display = 'block';
+        });
+    </script>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>HUMAnN3 Pathway Abundance Viewer</h1>
+            <!-- OPTIMIZATION: Add loading indicator -->
+            <div id="app-loading-status" style="display: none; font-size: 14px; color: #777;">
+                Loading application resources...
+            </div>
         </header>
         
         <div class="file-upload-section">
@@ -24,6 +36,11 @@
                 <input type="file" id="csv-file-upload" accept=".csv,.tsv,.txt" />
             </div>
             <div id="file-status" class="file-status"></div>
+            <!-- OPTIMIZATION: Add instructions for large files -->
+            <div class="file-tips" style="margin-top: 10px; font-size: 12px; color: #666;">
+                Tips: For large files (>100MB), processing may take several minutes. 
+                For best performance, consider pre-filtering your data to relevant pathways.
+            </div>
         </div>
         
         <div class="app-content" id="app-content" style="display: none;">
@@ -111,9 +128,31 @@
         </div>
     </div>
     
-    <!-- Load main script first -->
-    <script src="script/jquery.js"></script>
-    <!-- Load fixes after main script -->
-    <script src="script/fixes.js"></script>
+    <!-- OPTIMIZATION: Load Chart.js dynamically when needed -->
+    <script>
+        // Dynamic Chart.js loading
+        function loadChartJS() {
+            if (window.Chart) return Promise.resolve(); // Already loaded
+            
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js";
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+        
+        // Hide loading message when resources are loaded
+        window.addEventListener('load', function() {
+            document.getElementById('app-loading-status').style.display = 'none';
+        });
+    </script>
+    
+    <!-- Load optimization utilities first -->
+    <script src="script/optimizations.js" defer></script>
+    <!-- Then load main scripts -->
+    <script src="script/jquery.js" defer></script>
+    <script src="script/fixes.js" defer></script>
 </body>
 </html>
