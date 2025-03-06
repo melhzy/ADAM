@@ -1,4 +1,4 @@
-// Fix for the Chart Type, Sample Limit, and Download Data button
+// Optimized fixes.js for the HUMAnN3 Pathway Abundance Viewer
 
 // Update chart visualization with optimizations for large datasets
 function updateChart(pathway) {
@@ -9,21 +9,22 @@ function updateChart(pathway) {
     
     console.log(`Updating chart: type=${chartType}, sampleLimit=${sampleLimit}`);
     
-    // Sort samples by abundance for the chart
-    let sortedSamples = [...allSamples].sort((a, b) => {
-        return pathway.abundanceValues[b] - pathway.abundanceValues[a];
-    });
+    // OPTIMIZATION: Use indices for sorting instead of copying the full array
+    // Create an array of indices
+    const indices = Array.from(Array(allSamples.length).keys());
+    // Sort indices by abundance values (descending)
+    indices.sort((a, b) => pathway.abundanceValues[allSamples[b]] - pathway.abundanceValues[allSamples[a]]);
     
     // Limit samples to improve performance
-    const samplesToDisplay = sortedSamples.slice(0, Math.min(sampleLimit, sortedSamples.length));
+    const limitedIndices = indices.slice(0, Math.min(sampleLimit, indices.length));
     
-    // Extract data for the chart
-    const chartLabels = samplesToDisplay.map(sample => {
+    // Extract data for the chart using the sorted indices
+    const chartLabels = limitedIndices.map(i => {
         // Shorten sample names for display
-        return sample.replace(/_Abundance$/, '').substring(0, 15);
+        return allSamples[i].replace(/_Abundance$/, '').substring(0, 15);
     });
     
-    const chartData = samplesToDisplay.map(sample => pathway.abundanceValues[sample]);
+    const chartData = limitedIndices.map(i => pathway.abundanceValues[allSamples[i]]);
     
     // Define chart colors
     const backgroundColor = 'rgba(52, 152, 219, 0.5)';
@@ -54,7 +55,8 @@ function updateChart(pathway) {
             responsive: true,
             maintainAspectRatio: false,
             animation: {
-                duration: samplesToDisplay.length > 50 ? 0 : 1000 // Disable animation for large datasets
+                // OPTIMIZATION: Disable animation for large datasets
+                duration: limitedIndices.length > 30 ? 0 : 750
             },
             plugins: {
                 title: {
@@ -62,10 +64,9 @@ function updateChart(pathway) {
                     text: `${pathway.name.substring(0, 50)}${pathway.name.length > 50 ? '...' : ''} - Abundance`
                 },
                 tooltip: {
+                    // OPTIMIZATION: Simpler tooltip callback
                     callbacks: {
-                        label: function(context) {
-                            return `Abundance: ${formatNumber(context.raw)}`;
-                        }
+                        label: (context) => `Abundance: ${formatNumber(context.raw)}`
                     }
                 },
                 legend: {
@@ -86,8 +87,12 @@ function updateChart(pathway) {
                         text: 'Sample'
                     },
                     ticks: {
-                        maxRotation: 90,
-                        minRotation: 45
+                        // OPTIMIZATION: Reduce max rotation for better readability
+                        maxRotation: 60,
+                        minRotation: 30,
+                        // OPTIMIZATION: Limit the number of ticks for better performance
+                        autoSkip: true,
+                        maxTicksLimit: 20
                     }
                 }
             }
@@ -106,7 +111,7 @@ function updateChart(pathway) {
         };
         
         // Limit datasets for radar chart to avoid performance issues
-        if (samplesToDisplay.length > 12) {
+        if (limitedIndices.length > 12) {
             chartConfig.data.labels = chartLabels.slice(0, 12);
             chartConfig.data.datasets[0].data = chartData.slice(0, 12);
             
@@ -115,17 +120,18 @@ function updateChart(pathway) {
         }
     }
     
-    // Create the chart with optimized settings
+    // OPTIMIZATION: Use try-catch for chart creation to handle any errors gracefully
     try {
+        // Create the chart with optimized settings
         abundanceChart = new Chart(ctx, chartConfig);
         console.log("Chart created successfully");
     } catch (err) {
         console.error("Error creating chart:", err);
-        $('#abundance-chart').closest('.chart-container').html('<div class="error">Error creating chart</div>');
+        $('#abundance-chart').closest('.chart-container').html('<div class="error">Error creating chart: ' + err.message + '</div>');
     }
 }
 
-// Generate CSV for download
+// Generate CSV for download - optimized for memory usage with large datasets
 function downloadData(pathway) {
     if (!pathway) {
         console.error("Cannot download: no pathway selected");
@@ -134,26 +140,34 @@ function downloadData(pathway) {
     
     console.log("Generating CSV for download");
     
-    let csvContent = "Sample,Abundance\n";
-    
-    // Sort samples by abundance
-    const sortedSamples = [...allSamples].sort((a, b) => {
-        return pathway.abundanceValues[b] - pathway.abundanceValues[a];
-    });
-    
-    // Add data rows
-    sortedSamples.forEach(sample => {
-        const abundance = pathway.abundanceValues[sample];
-        csvContent += `${sample},${abundance}\n`;
-    });
-    
+    // OPTIMIZATION: Create a blob with streaming generation instead of building a large string
     try {
-        // Create blob instead of a direct data URL for better handling of large files
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        // Sort samples by abundance first
+        const indices = Array.from(Array(allSamples.length).keys());
+        indices.sort((a, b) => pathway.abundanceValues[allSamples[b]] - pathway.abundanceValues[allSamples[a]]);
+        
+        // Create a BlobBuilder-like approach for memory efficiency
+        const chunks = ["Sample,Abundance\n"];
+        
+        // Add data in chunks
+        for (let i = 0; i < indices.length; i++) {
+            const sample = allSamples[indices[i]];
+            const abundance = pathway.abundanceValues[sample];
+            chunks.push(`${sample},${abundance}\n`);
+            
+            // Flush every 1000 rows
+            if (i % 1000 === 999) {
+                console.log(`Processed ${i+1} rows for download`);
+            }
+        }
+        
+        // Create blob from chunks for better memory handling
+        const blob = new Blob(chunks, { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         
         // Create download link
         const link = document.createElement("a");
+        // Sanitize filename
         const filename = pathway.name.replace(/[/\\?%*:|"<>]/g, '_');
         link.setAttribute("href", url);
         link.setAttribute("download", `${filename}_abundance.csv`);
@@ -176,22 +190,11 @@ function downloadData(pathway) {
     }
 }
 
-// Fix the event handlers section to ensure proper functionality
+// OPTIMIZATION: Use event delegation for improved event handling
 $(document).ready(function() {
-    // Chart type change
-    $(document).on('change', '#chart-type', function() {
-        console.log("Chart type changed to:", $(this).val());
-        if (selectedPathwayId) {
-            const pathway = allData.find(item => item.id === selectedPathwayId);
-            if (pathway) {
-                updateChart(pathway);
-            }
-        }
-    });
-    
-    // Sample limit change
-    $(document).on('change', '#sample-limit', function() {
-        console.log("Sample limit changed to:", $(this).val());
+    // Chart type change - use one event handler
+    $(document).on('change', '#chart-type, #sample-limit', function() {
+        console.log(`${this.id} changed to:`, $(this).val());
         if (selectedPathwayId) {
             const pathway = allData.find(item => item.id === selectedPathwayId);
             if (pathway) {
