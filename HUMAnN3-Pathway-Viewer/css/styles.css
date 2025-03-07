@@ -1,0 +1,110 @@
+/* File input styling */
+.file-input-container {
+    margin: 20px 0;
+    text-align: center;
+    display: block;
+}
+
+.file-input-container input[type="file"] {
+    display: none;
+}
+
+.file-input-container label.btn {
+    cursor: pointer;
+    padding: 12px 25px;
+    font-size: 18px;
+    border-radius: 4px;
+    background-color: #007bff;
+    color: white;
+    transition: background-color 0.3s;
+    display: inline-block;
+    margin: 0 auto;
+}
+
+.file-input-container label.btn:hover {
+    background-color: #0069d9;
+    box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
+}
+
+/* Upload box styling */
+.upload-container {
+    width: 100%;
+    padding: 20px;
+}
+
+.upload-box {
+    border: 2px dashed #ccc;
+    border-radius: 5px;
+    padding: 40px 20px;
+    text-align: center;
+    background-color: #f9f9f9;
+    transition: border-color 0.3s, background-color 0.3s;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.upload-box:hover {
+    border-color: #007bff;
+    background-color: #f0f9ff;
+}
+
+.upload-box.uploading {
+    border-color: #007bff;
+    background-color: #f0f9ff;
+}
+
+.upload-box.success {
+    border-color: #28a745;
+    background-color: #f0fff4;
+}
+
+.upload-box.error {
+    border-color: #dc3545;
+    background-color: #fff0f0;
+}
+
+.upload-instructions i {
+    font-size: 48px;
+    color: #6c757d;
+    margin-bottom: 20px;
+}
+
+.upload-progress i {
+    font-size: 48px;
+    color: #007bff;
+    margin-bottom: 20px;
+}
+
+.upload-success i {
+    font-size: 48px;
+    color: #28a745;
+    margin-bottom: 20px;
+}
+
+.upload-error i {
+    font-size: 48px;
+    color: #dc3545;
+    margin-bottom: 20px;
+}
+
+.progress {
+    width: 100%;
+    max-width: 400px;
+    margin: 15px auto;
+    height: 20px;
+}
+
+.action-buttons {
+    margin-top: 20px;
+}
+
+.error-message {
+    color: #dc3545;
+    font-weight: bold;
+    max-width: 600px;
+    margin: 10px auto;
+    word-break: break-word;
+}

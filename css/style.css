@@ -1,10 +1,11 @@
-/* style.css */
+/* Updated style.css for HUMAnN3 Pathway Abundance Viewer with Alzheimer's Research focus */
 :root {
     --primary-color: #2c3e50;
     --secondary-color: #3498db;
     --accent-color: #e74c3c;
     --success-color: #2ecc71;
     --warning-color: #f39c12;
+    --alz-color: #8e44ad;       /* Purple for Alzheimer's themed elements */
     --light-bg: #ecf0f1;
     --dark-bg: #34495e;
     --text-color: #333;
@@ -42,6 +43,7 @@ header {
     color: var(--light-text);
     padding: 20px;
     text-align: center;
+    background-image: linear-gradient(to right, var(--primary-color), var(--alz-color));
 }
 
 /* File upload styles */
@@ -100,6 +102,11 @@ header {
 
 .file-error {
     color: var(--accent-color);
+    font-weight: bold;
+}
+
+.file-warning {
+    color: var(--warning-color);
     font-weight: bold;
 }
 
@@ -183,6 +190,12 @@ select {
     background-color: rgba(255, 255, 255, 0.1);
     border-radius: var(--border-radius);
     min-width: 150px;
+    transition: all 0.3s ease;
+}
+
+.stat-box:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
 }
 
 .stat-title {
@@ -327,6 +340,7 @@ select {
 .chart-container {
     height: 400px;
     margin: 20px 0;
+    position: relative;
 }
 
 .chart-options {
@@ -343,6 +357,36 @@ select {
 
 .action-btn:hover {
     background-color: #27ae60;
+}
+
+/* Alzheimer's specific panel */
+.alzheimers-panel {
+    padding: 20px;
+    background-color: rgba(142, 68, 173, 0.1); /* Light purple background */
+    margin-top: 20px;
+    border-radius: var(--border-radius);
+}
+
+.summary-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.alz-stat-box {
+    background-color: white;
+    border-radius: var(--border-radius);
+    padding: 15px;
+    box-shadow: var(--box-shadow);
+    min-width: 200px;
+    flex: 1;
+}
+
+.alz-stat-title {
+    font-weight: bold;
+    color: var(--alz-color);
+    margin-bottom: 8px;
 }
 
 /* Pagination */
@@ -393,6 +437,17 @@ select {
     color: var(--warning-color);
 }
 
+/* Virtual list for better performance */
+.virtual-list-content {
+    position: relative;
+    width: 100%;
+}
+
+.virtual-list-viewport {
+    position: absolute;
+    width: 100%;
+}
+
 /* Responsive design */
 @media (max-width: 1024px) {
     .main-content {
@@ -428,4 +483,28 @@ select {
         width: 100%;
         max-width: 200px;
     }
+}
+
+/* Download/Export buttons */
+#download-btn, #export-chart-btn {
+    background-color: var(--success-color);
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.2s;
+    margin: 5px;
+}
+
+#download-btn:hover, #export-chart-btn:hover {
+    background-color: #27ae60;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+#download-btn:active, #export-chart-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
 }

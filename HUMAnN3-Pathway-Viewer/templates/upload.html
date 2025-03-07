@@ -1,0 +1,53 @@
+<div class="upload-container" ng-controller="UploadController">
+    <div class="upload-box" 
+         ng-class="{'uploading': uploadState.isUploading, 'success': uploadState.success, 'error': uploadState.error}"
+         ng-drop="handleFileDrop($event)" 
+         ng-drag-over="handleDragOver($event)">
+        
+        <!-- Upload icon and instructions -->
+        <div class="upload-instructions" ng-if="!uploadState.isUploading && !uploadState.success && !uploadState.error">
+            <i class="fa fa-cloud-upload"></i>
+            <h3>Upload Pathway Abundance File</h3>
+            <p>Drag and drop your HUMAnN3 pathway abundance file here, or click the Browse button below.</p>
+            <div class="file-input-container">
+                <label for="fileInput" class="btn btn-primary btn-lg">Browse Files</label>
+                <input type="file" id="fileInput" accept=".tsv,.csv,.txt" onchange="angular.element(this).scope().handleFileSelect(event)" />
+            </div>
+        </div>
+        
+        <!-- Upload progress -->
+        <div class="upload-progress" ng-if="uploadState.isUploading">
+            <i class="fa fa-spinner fa-spin"></i>
+            <h3>Processing File...</h3>
+            <div class="progress">
+                <div class="progress-bar" role="progressbar" 
+                     ng-style="{ 'width': uploadState.progress + '%' }"
+                     aria-valuenow="{{uploadState.progress}}" aria-valuemin="0" aria-valuemax="100">
+                    {{uploadState.progress}}%
+                </div>
+            </div>
+            <p ng-if="fileInfo.name">{{fileInfo.name}} ({{fileInfo.sizeFormatted}})</p>
+        </div>
+        
+        <!-- Upload success -->
+        <div class="upload-success" ng-if="uploadState.success">
+            <i class="fa fa-check-circle"></i>
+            <h3>File Loaded Successfully</h3>
+            <p ng-if="fileInfo.name">{{fileInfo.name}} ({{fileInfo.sizeFormatted}})</p>
+            <div class="action-buttons">
+                <button class="btn btn-primary" ng-click="resetUpload()">Load Another File</button>
+            </div>
+        </div>
+        
+        <!-- Upload error -->
+        <div class="upload-error" ng-if="uploadState.error">
+            <i class="fa fa-exclamation-circle"></i>
+            <h3>Error Loading File</h3>
+            <p class="error-message">{{uploadState.error}}</p>
+            <p ng-if="fileInfo.name">File: {{fileInfo.name}}</p>
+            <div class="action-buttons">
+                <button class="btn btn-primary" ng-click="resetUpload()">Try Again</button>
+            </div>
+        </div>
+    </div>
+</div>

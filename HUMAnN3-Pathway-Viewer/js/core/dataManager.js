@@ -22,6 +22,9 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
             avgAbundance: 0
         };
         
+        // Cache for filtered pathways
+        service.filterCache = null;
+        
         // Keep track of file metadata
         var fileInfo = {
             name: null,
@@ -61,8 +64,28 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
                 // First column should be pathway IDs
                 const pathwayIdColumn = headers[0];
                 
-                // Remaining columns are sample names (excluding any metadata columns)
-                const sampleColumns = headers.slice(1).filter(h => !h.startsWith('# ') && h !== 'NAME');
+                // For HUMAnN3 pathabundance files, the first column is often named '#SampleID'
+                // or something similar. Let's handle variations.
+                let sampleColumns = [];
+                
+                // Check if there's a 'NAME' column which indicates a specific format
+                const hasNameColumn = headers.includes('NAME');
+                
+                if (hasNameColumn) {
+                    // Format where first column is ID and there's a separate NAME column
+                    sampleColumns = headers.filter(h => 
+                        h !== pathwayIdColumn && 
+                        h !== 'NAME' && 
+                        !h.startsWith('# ') &&
+                        !h.startsWith('#'));
+                } else {
+                    // Standard format where all non-first columns are samples
+                    // Filter out any metadata columns (commonly start with # in HUMAnN3 files)
+                    sampleColumns = headers.slice(1).filter(h => 
+                        !h.startsWith('# ') && 
+                        !h.startsWith('#') &&
+                        h !== 'NAME');
+                }
                 
                 console.log('Found', sampleColumns.length, 'samples');
                 
@@ -71,7 +94,7 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
                 
                 // Process data into pathway objects
                 const pathways = [];
-                const processedRows = 0;
+                let processedRows = 0;
                 
                 // Update progress
                 EventService.emit('data:processing', { progress: 0, total: rawData.length });
@@ -80,16 +103,31 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
                 rawData.forEach((row, index) => {
                     // Get pathway ID and type
                     let pathwayId = row[pathwayIdColumn];
-                    let pathwayName = row['NAME'] || pathwayId;
                     
-                    // Detect pathway type
+                    // Skip rows with empty pathway IDs
+                    if (!pathwayId || pathwayId.trim() === '') {
+                        return;
+                    }
+                    
+                    // For HUMAnN3 files, sometimes the pathway name is included with the ID
+                    // or in a separate NAME column
+                    let pathwayName = '';
+                    
+                    if (hasNameColumn && row['NAME']) {
+                        pathwayName = row['NAME'];
+                    } else {
+                        // If no NAME column, use the ID as the name
+                        pathwayName = pathwayId;
+                    }
+                    
+                    // Detect pathway type based on ID patterns
                     let pathwayType = 'other';
                     
-                    if (pathwayId.startsWith('UNMAPPED')) {
+                    if (pathwayId.includes('UNMAPPED')) {
                         pathwayType = 'unmapped';
-                    } else if (pathwayId.startsWith('UNINTEGRATED')) {
+                    } else if (pathwayId.includes('UNINTEGRATED')) {
                         pathwayType = 'unintegrated';
-                    } else if (pathwayId.startsWith('PWY') || pathwayId.includes('PWY')) {
+                    } else if (pathwayId.includes('PWY') || pathwayId.includes('MetaCyc')) {
                         pathwayType = 'metacyc';
                     }
                     
@@ -97,7 +135,14 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
                     const abundanceValues = {};
                     
                     sampleColumns.forEach(sample => {
-                        const value = parseFloat(row[sample]) || 0;
+                        // Convert to number and handle missing values
+                        let value = row[sample];
+                        if (value === undefined || value === null || value === '') {
+                            value = 0;
+                        } else if (typeof value === 'string') {
+                            value = parseFloat(value) || 0;
+                        }
+                        
                         abundanceValues[sample] = value;
                     });
                     
@@ -111,6 +156,7 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
                     });
                     
                     pathways.push(pathway);
+                    processedRows++;
                     
                     // Update progress periodically
                     if (index % 100 === 0 || index === rawData.length - 1) {
@@ -159,12 +205,17 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
                     avgAbundance: totalAbundance / (pathways.length || 1)
                 };
                 
+                // Clear filter cache
+                service.filterCache = null;
+                
                 // Broadcast data loaded event
                 EventService.emit('data:loaded', {
                     pathways: service.pathways,
                     samples: service.samples,
                     stats: service.dataStats
                 });
+                
+                console.log('Data processing complete:', service.dataStats);
                 
             } catch (error) {
                 console.error('Error processing data:', error);
@@ -209,11 +260,20 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
                     } else if (filters.sortField === 'name') {
                         return a.name.localeCompare(b.name);
                     } else if (filters.sortField === 'abundance') {
+                        // If a specific sample is selected, sort by that sample's abundance
+                        if (filters.selectedSample) {
+                            return b.getAbundanceForSample(filters.selectedSample) - 
+                                   a.getAbundanceForSample(filters.selectedSample);
+                        }
+                        // Otherwise sort by average abundance
                         return b.avgAbundance - a.avgAbundance;
                     }
                     return 0;
                 });
             }
+            
+            // Store filtered result in cache
+            service.filterCache = filtered;
             
             // Broadcast filters applied event
             EventService.emit('filters:applied', {
@@ -223,7 +283,6 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
             
             return filtered;
         };
-        
         
         /**
          * Get filtered pathways
@@ -387,6 +446,7 @@ app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersServic
             service.samples = [];
             service.hasData = false;
             service.selectedPathway = null;
+            service.filterCache = null;
             service.dataStats = {
                 totalPathways: 0,
                 totalSamples: 0,

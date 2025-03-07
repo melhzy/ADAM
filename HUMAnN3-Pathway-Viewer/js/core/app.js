@@ -1,10 +1,68 @@
 /**
  * HUMAnN3 Pathway Abundance Viewer
  * Core Application Module
+ * Initializes the Angular application and sets up global configurations
  */
 
-// Initialize Angular module
+// Initialize the main Angular application module
 var app = angular.module('humannPathwayViewer', []);
+
+// Application configuration
+app.config(['$compileProvider', function($compileProvider) {
+    // Disable debug info for production (better performance)
+    // Enable for debug mode
+    $compileProvider.debugInfoEnabled(false);
+    
+    // Allow blob URLs for downloads
+    $compileProvider.aHrefSanitizationWhitelist(/^\s*(https?|ftp|mailto|tel|file|blob):/);
+}]);
+
+// Global error handling
+app.factory('$exceptionHandler', ['$log', function($log) {
+    return function(exception, cause) {
+        // Log to console
+        $log.error(exception, cause);
+        
+        // If debug service is available, log there too
+        try {
+            const debugService = angular.element(document.body).injector().get('DebugService');
+            if (debugService && debugService.logError) {
+                debugService.logError('Angular exception: ' + exception.message, exception);
+            }
+        } catch (e) {
+            // Debug service not available yet
+            console.error('Error logging to DebugService:', e);
+        }
+    };
+}]);
+
+// Application initialization
+app.run(['$rootScope', '$window', '$timeout', function($rootScope, $window, $timeout) {
+    // Hide loading indicator when Angular has bootstrapped
+    $timeout(function() {
+        var loadingIndicator = document.getElementById('app-loading-status');
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
+    }, 500);
+    
+    // Detect if debug mode is enabled
+    const urlParams = new URLSearchParams($window.location.search);
+    $rootScope.debugMode = urlParams.get('debug') === 'true';
+    
+    // Application version
+    $rootScope.appVersion = '1.0.0';
+    
+    // Expose app status to root scope
+    $rootScope.appStatus = {
+        initialized: true,
+        dataLoaded: false,
+        error: null
+    };
+    
+    // Log initialization
+    console.log('HUMAnN3 Pathway Viewer initialized (v' + $rootScope.appVersion + ')');
+}]);
 
 // Main Controller
 app.controller('MainController', ['$scope', 'DataManager', function($scope, DataManager) {
