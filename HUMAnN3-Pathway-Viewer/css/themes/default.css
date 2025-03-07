@@ -1,0 +1,136 @@
+/**
+ * HUMAnN3 Pathway Abundance Viewer
+ * Default Theme
+ */
+
+:root {
+    /* Primary colors */
+    --primary-color: #2c3e50;
+    --primary-light: #34495e;
+    --primary-dark: #1a252f;
+    
+    /* Secondary (accent) colors */
+    --secondary-color: #3498db;
+    --secondary-light: #5dade2;
+    --secondary-dark: #2980b9;
+    
+    /* Status colors */
+    --success-color: #2ecc71;
+    --warning-color: #f39c12;
+    --danger-color: #e74c3c;
+    --info-color: #1abc9c;
+    
+    /* Pathway type colors */
+    --metacyc-color: #2ecc71;
+    --unmapped-color: #e74c3c;
+    --unintegrated-color: #f39c12;
+    --other-pathway-color: #1abc9c;
+    
+    /* Visualization color schemes */
+    --chart-color-1: #3498db;
+    --chart-color-2: #2ecc71;
+    --chart-color-3: #e74c3c;
+    --chart-color-4: #f39c12;
+    --chart-color-5: #9b59b6;
+    --chart-color-6: #1abc9c;
+    --chart-color-7: #f1c40f;
+    --chart-color-8: #e67e22;
+    
+    /* Background colors */
+    --light-bg: #ecf0f1;
+    --dark-bg: #2c3e50;
+    --card-bg: #ffffff;
+    
+    /* Text colors */
+    --text-dark: #2c3e50;
+    --text-light: #ecf0f1;
+    --text-muted: #95a5a6;
+    
+    /* Border and shadow */
+    --border-color: #ddd;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Viridis color scheme */
+.viridis-scheme {
+    --chart-color-1: #440154;
+    --chart-color-2: #414487;
+    --chart-color-3: #2a788e;
+    --chart-color-4: #22a884;
+    --chart-color-5: #7ad151;
+    --chart-color-6: #fde725;
+}
+
+/* Inferno color scheme */
+.inferno-scheme {
+    --chart-color-1: #000004;
+    --chart-color-2: #420a68;
+    --chart-color-3: #932667;
+    --chart-color-4: #dd513a;
+    --chart-color-5: #fca50a;
+    --chart-color-6: #fcffa4;
+}
+
+/* Plasma color scheme */
+.plasma-scheme {
+    --chart-color-1: #0d0887;
+    --chart-color-2: #6a00a8;
+    --chart-color-3: #b12a90;
+    --chart-color-4: #e16462;
+    --chart-color-5: #fca636;
+    --chart-color-6: #f0f921;
+}
+
+/* Cool color scheme */
+.cool-scheme {
+    --chart-color-1: #6e40aa;
+    --chart-color-2: #4776ff;
+    --chart-color-3: #10a4db;
+    --chart-color-4: #36c956;
+    --chart-color-5: #eff953;
+}
+
+/* Warm color scheme */
+.warm-scheme {
+    --chart-color-1: #6e40aa;
+    --chart-color-2: #be3caf;
+    --chart-color-3: #fe4b83;
+    --chart-color-4: #ff7847;
+    --chart-color-5: #e2b72f;
+}
+
+/* Pathway type color classes */
+.type-metacyc {
+    background-color: var(--metacyc-color);
+}
+
+.type-unmapped {
+    background-color: var(--unmapped-color);
+}
+
+.type-unintegrated {
+    background-color: var(--unintegrated-color);
+}
+
+.type-other {
+    background-color: var(--other-pathway-color);
+}
+
+/* Chart accent colors */
+.chart-color-1 { color: var(--chart-color-1); }
+.chart-color-2 { color: var(--chart-color-2); }
+.chart-color-3 { color: var(--chart-color-3); }
+.chart-color-4 { color: var(--chart-color-4); }
+.chart-color-5 { color: var(--chart-color-5); }
+.chart-color-6 { color: var(--chart-color-6); }
+.chart-color-7 { color: var(--chart-color-7); }
+.chart-color-8 { color: var(--chart-color-8); }
+
+.chart-bg-color-1 { background-color: var(--chart-color-1); }
+.chart-bg-color-2 { background-color: var(--chart-color-2); }
+.chart-bg-color-3 { background-color: var(--chart-color-3); }
+.chart-bg-color-4 { background-color: var(--chart-color-4); }
+.chart-bg-color-5 { background-color: var(--chart-color-5); }
+.chart-bg-color-6 { background-color: var(--chart-color-6); }
+.chart-bg-color-7 { background-color: var(--chart-color-7); }
+.chart-bg-color-8 { background-color: var(--chart-color-8); }

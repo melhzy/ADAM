@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="humannPathwayViewer">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUMAnN3 Pathway Abundance Viewer</title>
+    
+    <!-- External CSS Libraries -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Application CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components/pathway-list.css">
+    <link rel="stylesheet" href="css/components/pathway-detail.css">
+    <link rel="stylesheet" href="css/components/visualization.css">
+    <link rel="stylesheet" href="css/themes/default.css">
+    
+    <!-- Preload indicator -->
+    <script>
+        window.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('app-loading-status').style.display = 'block';
+        });
+    </script>
+</head>
+<body ng-controller="MainController">
+    <div class="container-fluid p-0">
+        <header class="app-header py-4">
+            <div class="container">
+                <h1 class="text-center mb-0">
+                    <i class="fas fa-dna me-2"></i>HUMAnN3 Pathway Abundance Viewer
+                </h1>
+                <p class="text-center text-light mt-2">Visualize and analyze metabolic pathway abundance from HUMAnN3 output</p>
+                <div id="app-loading-status" class="text-center text-light" style="display: none;">
+                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    Loading application resources...
+                </div>
+            </div>
+        </header>
+        
+        <!-- File Upload Section -->
+        <section class="file-upload-section py-4" ng-controller="FileUploadController">
+            <div class="container">
+                <div class="row justify-content-center">
+                    <div class="col-md-8">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h4 class="card-title mb-3">
+                                    <i class="fas fa-upload me-2"></i>Upload HUMAnN3 Pathway Abundance File
+                                </h4>
+                                
+                                <div class="file-upload-container text-center p-4 mb-3" 
+                                     ng-class="{'drag-over': isDragging}" 
+                                     file-drop="handleFileDrop($event)"
+                                     file-drag-over="handleDragOver($event)"
+                                     file-drag-leave="handleDragLeave($event)">
+                                    <label for="csv-file-upload" class="file-upload-label">
+                                        <span ng-if="!fileName">
+                                            <i class="fas fa-file-csv fa-2x mb-2"></i><br>
+                                            Drag and drop a CSV/TSV file<br>or click to browse
+                                        </span>
+                                        <span ng-if="fileName">
+                                            <i class="fas fa-file-csv me-2"></i>{{fileName}}
+                                        </span>
+                                        <span class="file-upload-button" ng-if="!isProcessing">Browse</span>
+                                    </label>
+                                    <input type="file" id="csv-file-upload" accept=".csv,.tsv,.txt" 
+                                           file-select="handleFileSelect($event)">
+                                </div>
+                                
+                                <div id="file-status" class="file-status text-center" ng-if="fileStatus">
+                                    <div ng-class="fileStatusClass">
+                                        <i class="{{fileStatusIcon}} me-2"></i>{{fileStatus}}
+                                    </div>
+                                    
+                                    <div class="progress mt-2" ng-if="isProcessing && processingProgress < 100">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                             role="progressbar" 
+                                             ng-style="{'width': processingProgress + '%'}" 
+                                             aria-valuenow="{{processingProgress}}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            {{processingProgress}}%
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="file-tips mt-3 small text-muted">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6><i class="fas fa-lightbulb me-2"></i>Tips:</h6>
+                                            <ul>
+                                                <li>Supports HUMAnN3 pathway abundance files (.tsv/.csv)</li>
+                                                <li>For large files (>100MB), processing may take several minutes</li>
+                                                <li>For best performance, pre-filter your data to pathways of interest</li>
+                                            </ul>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6><i class="fas fa-info-circle me-2"></i>Supported Formats:</h6>
+                                            <ul>
+                                                <li>HUMAnN3 pathway abundance output (.tsv)</li>
+                                                <li>Comma-separated files (.csv)</li>
+                                                <li>Tab-separated files with pathway information</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Main Application Content -->
+        <section class="app-content" id="app-content" ng-show="dataManager.hasData" ng-cloak>
+            <div class="container-fluid">
+                <!-- Statistics Panel -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="stats-panel" ng-controller="StatisticsController">
+                            <div class="row g-2">
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-box">
+                                        <div class="stat-title">Total Pathways</div>
+                                        <div class="stat-value">{{stats.totalPathways | number}}</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-box">
+                                        <div class="stat-title">Samples</div>
+                                        <div class="stat-value">{{stats.totalSamples | number}}</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-box">
+                                        <div class="stat-title">MetaCyc Pathways</div>
+                                        <div class="stat-value">{{stats.metacycPathways | number}}</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 col-sm-6">
+                                    <div class="stat-box">
+                                        <div class="stat-title">Unmapped</div>
+                                        <div class="stat-value">{{stats.unmappedPercent}}%</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Controls Section -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <div class="controls" ng-controller="FilterController">
+                                    <div class="row g-2">
+                                        <div class="col-lg-4">
+                                            <div class="search-bar d-flex">
+                                                <div class="input-group">
+                                                    <input type="text" id="search-input" class="form-control" 
+                                                           placeholder="Search pathway..." 
+                                                           ng-model="filters.searchTerm" 
+                                                           ng-keyup="$event.keyCode === 13 && applyFilters()">
+                                                    <button class="btn btn-primary" id="search-btn" ng-click="applyFilters()">
+                                                        <i class="fas fa-search"></i>
+                                                    </button>
+                                                </div>
+                                                <button id="reset-btn" class="btn btn-outline-secondary ms-2" ng-click="resetFilters()">
+                                                    <i class="fas fa-undo-alt"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-lg-8">
+                                            <div class="filter-options d-flex flex-wrap gap-2">
+                                                <div class="filter-group me-3">
+                                                    <label for="pathway-filter" class="form-label mb-0">Filter by type:</label>
+                                                    <select id="pathway-filter" class="form-select form-select-sm" 
+                                                            ng-model="filters.pathwayType" 
+                                                            ng-change="applyFilters()">
+                                                        <option value="all">All Pathways</option>
+                                                        <option value="UNINTEGRATED">UNINTEGRATED</option>
+                                                        <option value="UNMAPPED">UNMAPPED</option>
+                                                        <option value="PWY">MetaCyc Pathways</option>
+                                                    </select>
+                                                </div>
+                                                
+                                                <div class="filter-group me-3">
+                                                    <label for="sort-by" class="form-label mb-0">Sort by:</label>
+                                                    <select id="sort-by" class="form-select form-select-sm" 
+                                                            ng-model="filters.sortField" 
+                                                            ng-change="applyFilters()">
+                                                        <option value="id">Path ID</option>
+                                                        <option value="name">Path Name</option>
+                                                        <option value="abundance">Abundance</option>
+                                                    </select>
+                                                </div>
+                                                
+                                                <div class="filter-group">
+                                                    <label for="sample-filter" class="form-label mb-0">Sample filter:</label>
+                                                    <select id="sample-filter" class="form-select form-select-sm" 
+                                                            ng-model="filters.selectedSample" 
+                                                            ng-change="applyFilters()">
+                                                        <option value="">Average across samples</option>
+                                                        <option ng-repeat="sample in dataManager.getSamples()" value="{{sample}}">
+                                                            {{sample}}
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Main Content -->
+                <div class="row g-4 mb-4">
+                    <!-- Pathway List -->
+                    <div class="col-md-5 col-lg-4" ng-controller="PathwayListController">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-list me-2"></i>Pathways
+                                    <span class="badge bg-primary ms-2">{{filteredPathways.length}}</span>
+                                </h5>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-secondary" 
+                                            title="Toggle view mode"
+                                            ng-click="toggleViewMode()">
+                                        <i class="fas fa-{{viewMode === 'compact' ? 'th-list' : 'list'}}"></i>
+                                    </button>
+                                </div>
+                            </div>
+<div class="pathway-list" id="pathway-list">
+                                <div class="loading text-center p-5" ng-if="isLoading">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Loading pathways...</p>
+                                </div>
+                                
+                                <div class="no-results text-center p-5" ng-if="!isLoading && filteredPathways.length === 0">
+                                    <i class="fas fa-search fa-3x mb-3 text-muted"></i>
+                                    <p>No matching pathways found. Try adjusting your filters.</p>
+                                </div>
+                                
+                                <div class="pathway-list-content" virtual-scroll="filteredPathways" ng-if="!isLoading && filteredPathways.length > 0">
+                                    <div class="pathway-item" 
+                                         ng-repeat="pathway in displayedPathways" 
+                                         ng-class="{'selected': pathway.id === selectedPathwayId, 'compact': viewMode === 'compact'}"
+                                         ng-click="selectPathway(pathway)">
+                                        <div class="pathway-header">
+                                            <span class="pathway-id">{{pathway.id}}</span>
+                                            <span class="pathway-name">{{pathway.name}}</span>
+                                        </div>
+                                        <div class="pathway-meta">
+                                            <span class="pathway-type type-{{pathway.type}}">
+                                                {{pathway.type | capitalize}}
+                                            </span>
+                                            <span class="pathway-abundance">
+                                                {{pathway.getDisplayAbundance() | formatNumber}}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Loading indicator for virtual scrolling -->
+                                    <div class="text-center p-2" ng-if="isLoadingMore">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                            <span class="visually-hidden">Loading more...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-footer">
+                                <div class="pagination d-flex justify-content-between align-items-center">
+                                    <button ng-click="prevPage()" 
+                                            class="btn btn-sm btn-outline-secondary" 
+                                            ng-disabled="currentPage === 1">
+                                        <i class="fas fa-chevron-left"></i>
+                                    </button>
+                                    
+                                    <span class="mx-2">
+                                        Page {{currentPage}} of {{totalPages}}
+                                    </span>
+                                    
+                                    <button ng-click="nextPage()" 
+                                            class="btn btn-sm btn-outline-secondary" 
+                                            ng-disabled="currentPage === totalPages || totalPages === 0">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pathway Detail and Visualization -->
+                    <div class="col-md-7 col-lg-8" ng-controller="PathwayDetailController">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header">
+                                <ul class="nav nav-tabs card-header-tabs" id="pathwayTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" 
+                                                id="detail-tab" 
+                                                data-bs-toggle="tab" 
+                                                data-bs-target="#detail-content" 
+                                                type="button"
+                                                role="tab" 
+                                                aria-controls="detail-content" 
+                                                aria-selected="true">
+                                            <i class="fas fa-info-circle me-1"></i>Details
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" 
+                                                id="visualization-tab" 
+                                                data-bs-toggle="tab" 
+                                                data-bs-target="#visualization-content" 
+                                                type="button"
+                                                role="tab" 
+                                                aria-controls="visualization-content" 
+                                                aria-selected="false"
+                                                ng-class="{'disabled': !selectedPathway}"
+                                                ng-click="initVisualization()">
+                                            <i class="fas fa-chart-bar me-1"></i>Visualization
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" 
+                                                id="comparison-tab" 
+                                                data-bs-toggle="tab" 
+                                                data-bs-target="#comparison-content" 
+                                                type="button"
+                                                role="tab" 
+                                                aria-controls="comparison-content" 
+                                                aria-selected="false"
+                                                ng-class="{'disabled': !selectedPathway}"
+                                                ng-click="prepareComparison()">
+                                            <i class="fas fa-columns me-1"></i>Compare
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
+                            
+                            <div class="card-body">
+                                <div class="tab-content">
+                                    <!-- Pathway Detail Tab -->
+                                    <div class="tab-pane fade show active" id="detail-content" role="tabpanel" aria-labelledby="detail-tab">
+                                        <div class="no-selection text-center p-5" ng-if="!selectedPathway">
+                                            <i class="fas fa-arrow-left fa-3x mb-3 text-muted"></i>
+                                            <p>Select a pathway from the list to view details</p>
+                                        </div>
+                                        
+                                        <div class="pathway-detail" ng-if="selectedPathway">
+                                            <div class="detail-header">
+                                                <h3>{{selectedPathway.name}}</h3>
+                                                <span class="pathway-type type-{{selectedPathway.type}}">
+                                                    {{selectedPathway.type | capitalize}}
+                                                </span>
+                                            </div>
+                                            
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="detail-info">
+                                                        <h5>Pathway Information</h5>
+                                                        <table class="table table-sm">
+                                                            <tbody>
+                                                                <tr>
+                                                                    <th scope="row">ID</th>
+                                                                    <td>{{selectedPathway.id}}</td>
+                                                                </tr>
+                                                                <tr>
+                                                                    <th scope="row">Type</th>
+                                                                    <td>{{selectedPathway.type | capitalize}}</td>
+                                                                </tr>
+                                                                <tr>
+                                                                    <th scope="row">Average Abundance</th>
+                                                                    <td>{{selectedPathway.avgAbundance | formatNumber:5}}</td>
+                                                                </tr>
+                                                                <tr>
+                                                                    <th scope="row">Max Abundance</th>
+                                                                    <td>{{selectedPathway.maxAbundance | formatNumber:5}} ({{selectedPathway.maxSample}})</td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="detail-info">
+                                                        <h5>Quick View</h5>
+                                                        <div class="quick-chart-container">
+                                                            <canvas id="quick-chart" height="200"></canvas>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="detail-info mt-4">
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <h5>
+                                                        Sample Abundance
+                                                        <small class="text-muted">(Top {{sampleDisplayLimit}})</small>
+                                                    </h5>
+                                                    <button class="btn btn-sm btn-outline-primary" 
+                                                            ng-click="exportData()">
+                                                        <i class="fas fa-download me-1"></i>Export
+                                                    </button>
+                                                </div>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-hover">
+                                                        <thead>
+                                                            <tr>
+                                                                <th scope="col">#</th>
+                                                                <th scope="col">Sample</th>
+                                                                <th scope="col">Abundance</th>
+                                                                <th scope="col">Relative</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr ng-repeat="sample in topSamples">
+                                                                <td>{{$index + 1}}</td>
+                                                                <td>{{sample.name}}</td>
+                                                                <td>{{sample.abundance | formatNumber:5}}</td>
+                                                                <td>
+                                                                    <div class="progress" style="height: 8px;">
+                                                                        <div class="progress-bar" 
+                                                                             role="progressbar" 
+                                                                             ng-style="{'width': sample.relativePercent + '%'}" 
+                                                                             aria-valuenow="{{sample.relativePercent}}" 
+                                                                             aria-valuemin="0" 
+                                                                             aria-valuemax="100">
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+<!-- Visualization Tab -->
+                                    <div class="tab-pane fade" id="visualization-content" role="tabpanel" aria-labelledby="visualization-tab">
+                                        <div class="no-selection text-center p-5" ng-if="!selectedPathway">
+                                            <i class="fas fa-chart-bar fa-3x mb-3 text-muted"></i>
+                                            <p>Select a pathway to visualize</p>
+                                        </div>
+                                        
+                                        <div class="visualization-panel" ng-if="selectedPathway" ng-controller="VisualizationController">
+                                            <h5>{{selectedPathway.name}} - Abundance Visualization</h5>
+                                            
+                                            <div class="chart-options mb-3">
+                                                <div class="row g-2">
+                                                    <div class="col-md-4 col-sm-6">
+                                                        <label for="chart-type" class="form-label">Chart Type:</label>
+                                                        <select id="chart-type" class="form-select form-select-sm" 
+                                                                ng-model="visualOptions.chartType" 
+                                                                ng-change="updateVisualization()">
+                                                            <option value="bar">Bar Chart</option>
+                                                            <option value="line">Line Chart</option>
+                                                            <option value="radar">Radar Chart</option>
+                                                            <option value="polarArea">Polar Area</option>
+                                                            <option value="doughnut">Doughnut Chart</option>
+                                                            <option value="heatmap">Heatmap</option>
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    <div class="col-md-4 col-sm-6">
+                                                        <label for="sample-limit" class="form-label">Sample Limit:</label>
+                                                        <select id="sample-limit" class="form-select form-select-sm" 
+                                                                ng-model="visualOptions.sampleLimit" 
+                                                                ng-change="updateVisualization()">
+                                                            <option value="10">Top 10 Samples</option>
+                                                            <option value="20">Top 20 Samples</option>
+                                                            <option value="50">Top 50 Samples</option>
+                                                            <option value="100">Top 100 Samples</option>
+                                                            <option value="all">All Samples</option>
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    <div class="col-md-4 col-sm-6">
+                                                        <label for="color-scheme" class="form-label">Color Scheme:</label>
+                                                        <select id="color-scheme" class="form-select form-select-sm" 
+                                                                ng-model="visualOptions.colorScheme" 
+                                                                ng-change="updateVisualization()">
+                                                            <option value="default">Default</option>
+                                                            <option value="viridis">Viridis</option>
+                                                            <option value="inferno">Inferno</option>
+                                                            <option value="plasma">Plasma</option>
+                                                            <option value="cool">Cool</option>
+                                                            <option value="warm">Warm</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="chart-container">
+                                                <canvas id="abundance-chart"></canvas>
+                                            </div>
+                                            
+                                            <div class="d-flex justify-content-end mt-3">
+                                                <button class="btn btn-sm btn-outline-primary me-2" ng-click="downloadChart()">
+                                                    <i class="fas fa-image me-1"></i>Save Chart
+                                                </button>
+                                                <button class="btn btn-sm btn-primary" ng-click="exportData()">
+                                                    <i class="fas fa-download me-1"></i>Export Data
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Comparison Tab -->
+                                    <div class="tab-pane fade" id="comparison-content" role="tabpanel" aria-labelledby="comparison-tab">
+                                        <div class="comparison-panel" ng-controller="ComparisonController" ng-if="selectedPathway">
+                                            <h5>Pathway Comparison</h5>
+                                            
+                                            <div class="row mb-3">
+                                                <div class="col-md-6">
+                                                    <label for="comparison-type" class="form-label">Comparison Type:</label>
+                                                    <select id="comparison-type" class="form-select form-select-sm" 
+                                                            ng-model="comparisonOptions.type" 
+                                                            ng-change="updateComparison()">
+                                                        <option value="samples">Compare across samples</option>
+                                                        <option value="pathways">Compare with other pathways</option>
+                                                    </select>
+                                                </div>
+                                                
+                                                <div class="col-md-6" ng-if="comparisonOptions.type === 'pathways'">
+                                                    <label for="comparison-pathways" class="form-label">Compare with:</label>
+                                                    <select id="comparison-pathways" class="form-select form-select-sm" 
+                                                            ng-model="comparisonOptions.pathways" 
+                                                            multiple 
+                                                            ng-change="updateComparison()">
+                                                        <option ng-repeat="pathway in similarPathways" value="{{pathway.id}}">
+                                                            {{pathway.name}}
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                                
+                                                <div class="col-md-6" ng-if="comparisonOptions.type === 'samples'">
+                                                    <label for="comparison-samples" class="form-label">Select samples:</label>
+                                                    <select id="comparison-samples" class="form-select form-select-sm" 
+                                                            ng-model="comparisonOptions.samples" 
+                                                            multiple 
+                                                            ng-change="updateComparison()">
+                                                        <option ng-repeat="sample in topSamples | limitTo:20" value="{{sample.name}}">
+                                                            {{sample.name}}
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="comparison-chart-container">
+                                                <canvas id="comparison-chart"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="app-footer py-3">
+        <div class="container text-center">
+            <p class="mb-0">HUMAnN3 Pathway Abundance Viewer | <a href="https://github.com/biobakery/humann" target="_blank">HUMAnN3 Documentation</a></p>
+        </div>
+    </footer>
+    
+    <!-- External JS Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.2/angular.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.0/papaparse.min.js"></script>
+    
+    <!-- Lazy-loaded libraries -->
+    <script>
+        // Dynamically load Chart.js when needed
+        function loadChartJS() {
+            if (window.Chart) return Promise.resolve(); // Already loaded
+            
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js";
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+    </script>
+    
+    <!-- Application JS - Core -->
+    <script src="js/core/app.js"></script>
+    <script src="js/core/dataManager.js"></script>
+    <script src="js/core/eventHandler.js"></script>
+    
+    <!-- Application JS - Models -->
+    <script src="js/models/pathway.js"></script>
+    <script src="js/models/sample.js"></script>
+    
+    <!-- Application JS - Utils -->
+    <script src="js/utils/optimization.js"></script>
+    <script src="js/utils/formatters.js"></script>
+    <script src="js/utils/csvParser.js"></script>
+    <script src="js/utils/chartUtils.js"></script>
+    
+    <!-- Application JS - Components -->
+    <script src="js/components/fileUploader.js"></script>
+    <script src="js/components/pathwayList.js"></script>
+    <script src="js/components/pathwayDetail.js"></script>
+    <script src="js/components/visualization.js"></script>
+    <script src="js/components/statistics.js"></script>
+    <script src="js/components/comparison.js"></script>
+</body>
+</html>

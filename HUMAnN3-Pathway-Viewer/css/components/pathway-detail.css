@@ -1,0 +1,170 @@
+/**
+ * HUMAnN3 Pathway Abundance Viewer
+ * Pathway Detail Component Styles
+ */
+
+/* Pathway Detail Container */
+.pathway-detail {
+    padding: var(--spacing-md);
+}
+
+/* Detail Header */
+.detail-header {
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+}
+
+.detail-header h3 {
+    margin-bottom: var(--spacing-sm);
+    word-wrap: break-word;
+    padding-right: 80px; /* Space for the type badge */
+}
+
+.detail-header .pathway-type {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+/* Detail Information Sections */
+.detail-info {
+    margin-bottom: var(--spacing-lg);
+}
+
+.detail-info h5 {
+    margin-bottom: var(--spacing-md);
+    color: var(--primary-color);
+    font-weight: 600;
+    padding-bottom: var(--spacing-xs);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Abundance Table */
+.abundance-table {
+    width: 100%;
+    margin-bottom: var(--spacing-md);
+}
+
+.abundance-table th {
+    background-color: var(--light-bg);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.abundance-table tr:hover {
+    background-color: rgba(52, 152, 219, 0.05);
+}
+
+/* Quick Chart */
+.quick-chart-container {
+    height: 200px;
+    position: relative;
+    margin-top: var(--spacing-md);
+}
+
+/* Progress bars */
+.progress {
+    height: 8px;
+    background-color: var(--light-bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    background-color: var(--secondary-color);
+    height: 100%;
+}
+
+/* Tab content */
+.tab-content {
+    padding-top: var(--spacing-md);
+}
+
+.tab-pane {
+    min-height: 400px;
+}
+
+/* No selection state */
+.no-selection {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-muted);
+    height: 100%;
+    min-height: 300px;
+}
+
+.no-selection i {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-md);
+    opacity: 0.6;
+}
+
+/* Comparison Panel */
+.comparison-panel {
+    padding: var(--spacing-md);
+}
+
+.comparison-chart-container {
+    height: 400px;
+    position: relative;
+    margin-top: var(--spacing-lg);
+}
+
+/* Multi-select control */
+select[multiple] {
+    height: 150px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+    .detail-header h3 {
+        font-size: 1.4rem;
+    }
+    
+    .quick-chart-container {
+        height: 150px;
+    }
+    
+    .tab-pane {
+        min-height: 300px;
+    }
+}
+
+@media (max-width: 768px) {
+    .detail-header .pathway-type {
+        position: static;
+        margin-top: var(--spacing-xs);
+    }
+    
+    .detail-header h3 {
+        padding-right: 0;
+    }
+    
+    .detail-info {
+        margin-bottom: var(--spacing-md);
+    }
+    
+    .comparison-chart-container {
+        height: 300px;
+    }
+}
+
+@media (max-width: 576px) {
+    .pathway-detail {
+        padding: var(--spacing-sm);
+    }
+    
+    .detail-header {
+        margin-bottom: var(--spacing-md);
+        padding-bottom: var(--spacing-sm);
+    }
+    
+    .tab-pane {
+        min-height: 250px;
+    }
+}
