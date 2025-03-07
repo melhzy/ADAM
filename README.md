@@ -12,27 +12,20 @@ Your application follows a client-side single-page application (SPA) architectur
 
 ```
 HUMAnN3-Pathway-Viewer/
-├── index.html               # Entry point
-├── css/
-│   ├── style.css            # Main styles
-│   ├── components/          # Component-specific styles
-│   └── themes/              # Optional theming support
-├── js/
-│   ├── core/                # Core application logic
-│   │   ├── app.js           # Application initialization
-│   │   ├── dataManager.js   # Data processing and management
-│   │   └── eventHandler.js  # Centralized event handling
-│   ├── components/          # UI component modules
-│   │   ├── fileUploader.js  # File upload handling
-│   │   ├── pathwayList.js   # Pathway listing with virtual scrolling
-│   │   ├── pathwayDetail.js # Pathway detail view
-│   │   ├── visualization.js # Chart generation and controls
-│   │   └── statistics.js    # Statistics panel functionality
-│   └── utils/               # Utility functions
-│       ├── optimization.js  # Performance optimizations
-│       ├── formatters.js    # Data formatting helpers
-│       └── csvParser.js     # Enhanced CSV parsing
-└── assets/                  # Static assets (icons, etc.)
+├── index.html              # Single entry point HTML
+├── assets/                 # Static assets
+│   ├── css/                # Stylesheets
+│   │   ├── main.css        # Combined CSS
+│   │   └── bootstrap.min.css
+│   ├── js/                 # JavaScript modules
+│   │   ├── app.js          # Main application code
+│   │   ├── fileParser.js   # Modular file parsing
+│   │   ├── visualization.js # Chart rendering
+│   │   ├── dataProcess.js  # Data processing logic
+│   │   ├── alzAnalysis.js  # Alzheimer's specific analysis
+│   │   └── vendors/        # Third-party libraries
+│   └── img/                # Images and icons
+└── data/                   # Sample data (if needed)
 ```
 
 ### 3. Data Flow Architecture
