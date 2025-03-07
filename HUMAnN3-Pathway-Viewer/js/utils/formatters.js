@@ -48,6 +48,22 @@ app.service('FormattersService', [function() {
     };
     
     /**
+     * Format a sample name (truncate if too long)
+     * @param {String} name - Sample name
+     * @param {Number} maxLength - Maximum length before truncation
+     * @returns {String} - Formatted sample name
+     */
+    service.formatSampleName = function(name, maxLength) {
+        if (!name) return '';
+        maxLength = maxLength || 15;
+        
+        if (name.length <= maxLength) return name;
+        
+        // If name is too long, truncate with ellipsis
+        return name.substring(0, maxLength - 3) + '...';
+    };
+    
+    /**
      * Truncate a string with ellipsis if it exceeds max length
      * @param {String} str - String to truncate
      * @param {Number} maxLength - Maximum length (default: 50)
@@ -62,17 +78,19 @@ app.service('FormattersService', [function() {
     };
     
     /**
-     * Capitalize first letter of a string
-     * @param {String} str - String to capitalize
-     * @returns {String} - Capitalized string
+     * Sanitize a string for use as a filename
+     * @param {String} str - String to sanitize
+     * @returns {String} - Sanitized string
      */
-    service.capitalize = function(str) {
-        if (!str) return '';
-        return str.charAt(0).toUpperCase() + str.slice(1);
+    service.sanitizeFilename = function(str) {
+        if (!str) return 'file';
+        
+        // Replace invalid filename characters with underscores
+        return str.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_').substring(0, 100);
     };
     
     /**
-     * Convert a CSV string to a downloadable file
+     * Download a CSV string as a file
      * @param {String} csvContent - CSV content
      * @param {String} filename - Filename without extension
      */
@@ -110,22 +128,109 @@ app.service('FormattersService', [function() {
     };
     
     /**
-     * Parse a query string into an object
-     * @param {String} queryString - The query string to parse
-     * @returns {Object} - Object containing the query parameters
+     * Download a canvas as an image
+     * @param {HTMLCanvasElement} canvas - Canvas to download
+     * @param {String} filename - Filename without extension
      */
-    service.parseQueryString = function(queryString) {
-        if (!queryString) return {};
+    service.downloadCanvasAsImage = function(canvas, filename) {
+        if (!canvas) return;
         
-        const params = {};
-        const queries = queryString.substring(1).split('&');
+        // Create download link
+        const link = document.createElement('a');
         
-        for (let i = 0; i < queries.length; i++) {
-            const pair = queries[i].split('=');
-            params[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+        // Convert canvas to PNG data URL
+        const dataURL = canvas.toDataURL('image/png');
+        
+        // Set link attributes
+        link.setAttribute('href', dataURL);
+        link.setAttribute('download', filename + '.png');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        
+        // Trigger download
+        link.click();
+        
+        // Clean up
+        document.body.removeChild(link);
+    };
+    
+    /**
+     * Parse color from various formats to RGB array
+     * @param {String} color - Color in hex, rgb, or rgba format
+     * @returns {Array} - [r, g, b] array
+     */
+    service.parseColor = function(color) {
+        // Default if parsing fails
+        if (!color) return [0, 0, 0];
+        
+        // Handle hex colors
+        if (color.startsWith('#')) {
+            const hex = color.substring(1);
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            return [r, g, b];
         }
         
-        return params;
+        // Handle rgb/rgba colors
+        if (color.startsWith('rgb')) {
+            const values = color.match(/\d+/g);
+            if (values && values.length >= 3) {
+                return [parseInt(values[0]), parseInt(values[1]), parseInt(values[2])];
+            }
+        }
+        
+        // Default fallback
+        return [0, 0, 0];
+    };
+    
+    /**
+     * Interpolate between two colors
+     * @param {String} color1 - First color (hex or rgb)
+     * @param {String} color2 - Second color (hex or rgb)
+     * @param {Number} ratio - Interpolation ratio (0-1)
+     * @returns {String} - Interpolated color as hex
+     */
+    service.interpolateColors = function(color1, color2, ratio) {
+        const rgb1 = service.parseColor(color1);
+        const rgb2 = service.parseColor(color2);
+        
+        const r = Math.round(rgb1[0] + (rgb2[0] - rgb1[0]) * ratio);
+        const g = Math.round(rgb1[1] + (rgb2[1] - rgb1[1]) * ratio);
+        const b = Math.round(rgb1[2] + (rgb2[2] - rgb1[2]) * ratio);
+        
+        return '#' + 
+            r.toString(16).padStart(2, '0') + 
+            g.toString(16).padStart(2, '0') + 
+            b.toString(16).padStart(2, '0');
+    };
+    
+    /**
+     * Generate colors for charts
+     * @param {Number} count - Number of colors needed
+     * @param {String} scheme - Color scheme name
+     * @returns {Array} - Array of color strings
+     */
+    service.generateColors = function(count, scheme) {
+        // Base color sets for different schemes
+        const colorSets = {
+            default: ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#f1c40f', '#e67e22'],
+            viridis: ['#440154', '#414487', '#2a788e', '#22a884', '#7ad151', '#fde725'],
+            inferno: ['#000004', '#420a68', '#932667', '#dd513a', '#fca50a', '#fcffa4'],
+            plasma: ['#0d0887', '#6a00a8', '#b12a90', '#e16462', '#fca636', '#f0f921'],
+            cool: ['#6e40aa', '#4776ff', '#10a4db', '#36c956', '#eff953'],
+            warm: ['#6e40aa', '#be3caf', '#fe4b83', '#ff7847', '#e2b72f']
+        };
+        
+        const colors = colorSets[scheme] || colorSets.default;
+        
+        // Generate color array
+        const result = [];
+        for (let i = 0; i < count; i++) {
+            result.push(colors[i % colors.length]);
+        }
+        
+        return result;
     };
     
     return service;

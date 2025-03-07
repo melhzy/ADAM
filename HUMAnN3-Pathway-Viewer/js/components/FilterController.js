@@ -19,8 +19,17 @@ app.controller('FilterController', [
          * Apply current filters
          */
         $scope.applyFilters = function() {
-            // Apply filters via DataManager
-            DataManager.applyFilters($scope.filters);
+            console.log('Applying filters:', JSON.stringify($scope.filters));
+            
+            // Apply filters via DataManager and get filtered results
+            const filteredPathways = DataManager.applyFilters($scope.filters);
+            
+            // Emit event with filtered pathways - we're passing this directly
+            // rather than having the controller call DataManager.getFilteredPathways()
+            EventService.emit('filters:applied', {
+                filters: $scope.filters,
+                pathways: filteredPathways
+            });
         };
         
         /**
@@ -54,9 +63,31 @@ app.controller('FilterController', [
                 }
             });
             
+            // Watch for pathway type changes
+            $scope.$watch('filters.pathwayType', function(newVal, oldVal) {
+                if (newVal !== oldVal) {
+                    $scope.applyFilters();
+                }
+            });
+            
+            // Watch for sort field changes
+            $scope.$watch('filters.sortField', function(newVal, oldVal) {
+                if (newVal !== oldVal) {
+                    $scope.applyFilters();
+                }
+            });
+            
+            // Watch for sample filter changes
+            $scope.$watch('filters.selectedSample', function(newVal, oldVal) {
+                if (newVal !== oldVal) {
+                    $scope.applyFilters();
+                }
+            });
+            
             // Subscribe to events
             EventService.on('data:loaded', function() {
-                // Apply default filters
+                console.log('Received data:loaded event in FilterController');
+                // Apply default filters when data is initially loaded
                 $scope.applyFilters();
             });
             
@@ -68,6 +99,7 @@ app.controller('FilterController', [
             
             // Check if data is already loaded
             if (DataManager.hasData) {
+                console.log('Data already loaded, applying initial filters');
                 $scope.applyFilters();
             }
         }

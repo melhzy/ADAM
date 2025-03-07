@@ -40,6 +40,7 @@ app.controller('PathwayListController', [
                 localStorage.setItem('pathwayViewMode', $scope.viewMode);
             } catch (e) {
                 // Ignore storage errors
+                console.warn('Failed to save view mode preference:', e);
             }
         };
         
@@ -138,18 +139,27 @@ app.controller('PathwayListController', [
             
             // Subscribe to events
             EventService.on('data:loaded', function() {
+                console.log('Received data:loaded event in PathwayListController');
+                
+                // Update with an $apply since this is an async event
                 $scope.$apply(function() {
                     $scope.isLoading = false;
                     $scope.filteredPathways = DataManager.getFilteredPathways();
+                    console.log('Filtered pathways count:', $scope.filteredPathways.length);
+                    
                     updatePagination();
                     updateDisplayedPathways();
                 });
             });
             
             EventService.on('filters:applied', function(data) {
+                console.log('Received filters:applied event with', (data && data.pathways) ? data.pathways.length : 0, 'pathways');
+                
                 $scope.$apply(function() {
                     $scope.isLoading = false;
-                    $scope.filteredPathways = DataManager.getFilteredPathways();
+                    // Important: take the filtered pathways from the event data rather than calling getFilteredPathways
+                    $scope.filteredPathways = data && data.pathways ? data.pathways : [];
+                    
                     updatePagination();
                     
                     // If we have a selected pathway, try to keep it in view
@@ -188,7 +198,15 @@ app.controller('PathwayListController', [
                 });
             });
             
-            // Virtual scrolling handler for large pathway lists
+            // Check if data is already loaded and apply filters to initialize the list
+            if (DataManager.hasData) {
+                console.log('Data already loaded, initializing pathway list');
+                $scope.filteredPathways = DataManager.getFilteredPathways();
+                updatePagination();
+                updateDisplayedPathways();
+            }
+            
+            // Set up virtual scrolling for large pathway lists
             const pathwayList = document.getElementById('pathway-list');
             
             if (pathwayList) {

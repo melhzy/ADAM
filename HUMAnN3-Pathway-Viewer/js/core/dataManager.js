@@ -4,137 +4,120 @@
  * Central service for data handling and manipulation
  */
 
-app.service('DataManagerService', ['$q', 'EventHandlerService', 'CSVParserService', 'FormattersService', 
-function($q, EventHandlerService, CSVParserService, FormattersService) {
-    var service = this;
-    
-    // Data storage
-    service.pathways = [];
-    service.samples = [];
-    service.hasData = false;
-    service.dataStats = {
-        totalPathways: 0,
-        totalSamples: 0,
-        metacycPathways: 0,
-        unmappedPercent: 0,
-        maxAbundance: 0,
-        avgAbundance: 0
-    };
-    
-    // Keep track of file metadata
-    var fileInfo = {
-        name: null,
-        size: 0,
-        lastModified: null
-    };
-    
-    /**
-     * Load data from a file
-     * @param {File} file - File to load
-     * @returns {Promise} - Promise resolving when data is loaded
-     */
-    service.loadFromFile = function(file) {
-        const deferred = $q.defer();
+app.service('DataManager', ['$q', 'EventService', 'CSVParser', 'FormattersService', 'PathwayModel',
+    function($q, EventService, CSVParser, FormattersService, PathwayModel) {
+        var service = this;
         
-        // Validate file input
-        if (!file || !(file instanceof File)) {
-            console.error('Invalid file object provided:', file);
-            deferred.reject('Invalid file object. Please select a valid file.');
-            
-            // Broadcast error event
-            EventHandlerService.broadcast(EventHandlerService.events.DATA_ERROR, {
-                error: 'Invalid file object. Please select a valid file.'
-            });
-            
-            return deferred.promise;
-        }
-        
-        console.log('File loading started:', file.name, file.size);
-        
-        // Store file info
-        fileInfo = {
-            name: file.name,
-            size: file.size,
-            lastModified: new Date(file.lastModified)
+        // Data storage
+        service.pathways = [];
+        service.samples = [];
+        service.hasData = false;
+        service.selectedPathway = null;
+        service.dataStats = {
+            totalPathways: 0,
+            totalSamples: 0,
+            metacycPathways: 0,
+            unmappedPercent: 0,
+            maxAbundance: 0,
+            avgAbundance: 0
         };
         
-        // Broadcast file upload start event
-        EventHandlerService.broadcast(EventHandlerService.events.FILE_UPLOAD_START, {
-            file: fileInfo
-        });
+        // Keep track of file metadata
+        var fileInfo = {
+            name: null,
+            size: 0,
+            lastModified: null
+        };
         
-        // Parse the file
-        CSVParserService.parseFile(file)
-            .then(
-                function(result) {
-                    console.log('File parsed successfully, processing data...');
-                    // Process the data and prepare it for use
-                    return processData(result);
-                },
-                function(parseError) {
-                    console.error('Error parsing file:', parseError);
-                    throw new Error('Could not parse file: ' + (parseError.message || parseError));
-                }
-            )
-            .then(
-                function(data) {
-                    console.log('Data processed successfully, updating service data...');
-                    // Update the service data
-                    updateServiceData(data);
+        /**
+         * Set file info
+         * @param {File} file - File object
+         */
+        service.setFileInfo = function(file) {
+            fileInfo = {
+                name: file.name,
+                size: file.size,
+                lastModified: new Date(file.lastModified)
+            };
+            
+            // Broadcast file info updated event
+            EventService.emit('fileInfo:updated', fileInfo);
+        };
+        
+        /**
+         * Process parsed data
+         * @param {Array} rawData - Parsed CSV/TSV data
+         * @param {Array} headers - Column headers
+         */
+        service.processData = function(rawData, headers) {
+            // Validate input
+            if (!rawData || !rawData.length || !headers || !headers.length) {
+                throw new Error('Invalid data format. Missing data or headers.');
+            }
+            
+            try {
+                console.log('Processing data, rows:', rawData.length, 'columns:', headers.length);
+                
+                // First column should be pathway IDs
+                const pathwayIdColumn = headers[0];
+                
+                // Remaining columns are sample names (excluding any metadata columns)
+                const sampleColumns = headers.slice(1).filter(h => !h.startsWith('# ') && h !== 'NAME');
+                
+                console.log('Found', sampleColumns.length, 'samples');
+                
+                // Keep track of samples
+                service.samples = sampleColumns;
+                
+                // Process data into pathway objects
+                const pathways = [];
+                const processedRows = 0;
+                
+                // Update progress
+                EventService.emit('data:processing', { progress: 0, total: rawData.length });
+                
+                // Process each row (one pathway per row)
+                rawData.forEach((row, index) => {
+                    // Get pathway ID and type
+                    let pathwayId = row[pathwayIdColumn];
+                    let pathwayName = row['NAME'] || pathwayId;
                     
-                    // Broadcast data loaded event
-                    EventHandlerService.broadcast(EventHandlerService.events.DATA_LOADED, {
-                        pathways: service.pathways,
-                        samples: service.samples,
-                        stats: service.dataStats
+                    // Detect pathway type
+                    let pathwayType = 'other';
+                    
+                    if (pathwayId.startsWith('UNMAPPED')) {
+                        pathwayType = 'unmapped';
+                    } else if (pathwayId.startsWith('UNINTEGRATED')) {
+                        pathwayType = 'unintegrated';
+                    } else if (pathwayId.startsWith('PWY') || pathwayId.includes('PWY')) {
+                        pathwayType = 'metacyc';
+                    }
+                    
+                    // Create abundance map for this pathway
+                    const abundanceValues = {};
+                    
+                    sampleColumns.forEach(sample => {
+                        const value = parseFloat(row[sample]) || 0;
+                        abundanceValues[sample] = value;
                     });
                     
-                    // Resolve the promise
-                    deferred.resolve(service.pathways);
-                    console.log('File loading completed successfully.');
-                },
-                function(processError) {
-                    console.error('Error processing data:', processError);
-                    throw new Error('Error processing data: ' + (processError.message || processError));
-                }
-            )
-            .catch(function(error) {
-                const errorMsg = error instanceof Error ? error.message : error.toString();
-                console.error('Error loading data from file:', errorMsg);
-                
-                // Broadcast error event
-                EventHandlerService.broadcast(EventHandlerService.events.DATA_ERROR, {
-                    error: errorMsg
+                    // Create pathway object
+                    const pathway = new PathwayModel({
+                        id: pathwayId,
+                        name: pathwayName,
+                        type: pathwayType,
+                        abundanceValues: abundanceValues,
+                        index: index
+                    });
+                    
+                    pathways.push(pathway);
+                    
+                    // Update progress periodically
+                    if (index % 100 === 0 || index === rawData.length - 1) {
+                        const progress = Math.round((index / rawData.length) * 100);
+                        EventService.emit('data:processing', { progress: progress, total: rawData.length });
+                    }
                 });
-                
-                // Reject the promise
-                deferred.reject(errorMsg);
-            });
-        
-        // Return the promise
-        return deferred.promise;
-    };
-    
-    /**
-     * Process parsed data
-     * @param {Object} parseResult - Result from CSV parser
-     * @returns {Object} - Processed data
-     */
-    function processData(parseResult) {
-        return $q(function(resolve, reject) {
-            try {
-                // Validate parse result
-                if (!parseResult || !parseResult.data || !Array.isArray(parseResult.data.pathways)) {
-                    console.error('Invalid parse result structure:', parseResult);
-                    reject('Invalid data format. Expected pathway data is missing.');
-                    return;
-                }
-                
-                console.log('Processing data, found', (parseResult.data.pathways || []).length, 'pathways');
-                
-                // Extract basic info
-                const pathways = parseResult.data.pathways || [];
-                const sampleCount = parseResult.sampleCount || 0;
                 
                 // Calculate statistics
                 let metacycCount = 0;
@@ -142,10 +125,7 @@ function($q, EventHandlerService, CSVParserService, FormattersService) {
                 let totalAbundance = 0;
                 let maxAbundance = 0;
                 
-                // Process pathways
-                for (let i = 0; i < pathways.length; i++) {
-                    const pathway = pathways[i];
-                    
+                pathways.forEach(pathway => {
                     // Count MetaCyc pathways
                     if (pathway.type === 'metacyc') {
                         metacycCount++;
@@ -161,177 +141,271 @@ function($q, EventHandlerService, CSVParserService, FormattersService) {
                     
                     // Track maximum abundance
                     maxAbundance = Math.max(maxAbundance, pathway.maxAbundance);
-                }
-                
-                // Extract all sample names
-                const sampleNames = [];
-                if (pathways.length > 0) {
-                    const firstPathway = pathways[0];
-                    Object.keys(firstPathway.abundances).forEach(function(sampleName) {
-                        sampleNames.push(sampleName);
-                    });
-                }
+                });
                 
                 // Calculate unmapped percentage
                 const unmappedPercent = totalAbundance > 0 ? 
                     (unmappedAbundance / totalAbundance * 100).toFixed(1) : 0;
                 
-                // Prepare result
-                const result = {
-                    pathways: pathways,
-                    samples: sampleNames,
-                    stats: {
-                        totalPathways: pathways.length,
-                        totalSamples: sampleNames.length,
-                        metacycPathways: metacycCount,
-                        unmappedPercent: unmappedPercent,
-                        maxAbundance: maxAbundance,
-                        avgAbundance: totalAbundance / (pathways.length || 1)
-                    }
+                // Update service state
+                service.pathways = pathways;
+                service.hasData = true;
+                service.dataStats = {
+                    totalPathways: pathways.length,
+                    totalSamples: sampleColumns.length,
+                    metacycPathways: metacycCount,
+                    unmappedPercent: unmappedPercent,
+                    maxAbundance: maxAbundance,
+                    avgAbundance: totalAbundance / (pathways.length || 1)
                 };
                 
-                // Resolve the promise with the processed data
-                resolve(result);
-            } catch (e) {
-                console.error('Error in processData:', e);
-                reject('Error processing data: ' + e.message);
+                // Broadcast data loaded event
+                EventService.emit('data:loaded', {
+                    pathways: service.pathways,
+                    samples: service.samples,
+                    stats: service.dataStats
+                });
+                
+            } catch (error) {
+                console.error('Error processing data:', error);
+                EventService.emit('data:error', { error: error.message });
+                throw error;
             }
-        });
-    }
-    
-    /**
-     * Update service data with processed data
-     * @param {Object} data - Processed data
-     */
-    function updateServiceData(data) {
-        // Update pathways array
-        service.pathways = data.pathways;
-        
-        // Update samples array
-        service.samples = data.samples;
-        
-        // Update statistics
-        service.dataStats = data.stats;
-        
-        // Set the hasData flag
-        service.hasData = true;
-    }
-    
-    /**
-     * Get list of all sample names
-     * @returns {Array} - Array of sample names
-     */
-    service.getSamples = function() {
-        return service.samples;
-    };
-    
-    /**
-     * Get a pathway by ID
-     * @param {String} id - Pathway ID
-     * @returns {Object|null} - Pathway object or null if not found
-     */
-    service.getPathwayById = function(id) {
-        if (!id) return null;
-        
-        for (let i = 0; i < service.pathways.length; i++) {
-            if (service.pathways[i].id === id) {
-                return service.pathways[i];
-            }
-        }
-        return null;
-    };
-    
-    /**
-     * Filter pathways based on criteria
-     * @param {Object} filters - Filter criteria
-     * @returns {Array} - Filtered pathways
-     */
-    service.filterPathways = function(filters) {
-        if (!filters) return service.pathways;
-        
-        // Start with all pathways
-        let result = service.pathways.slice();
-        
-        // Apply search term filter
-        if (filters.searchTerm) {
-            const searchTerm = filters.searchTerm.toLowerCase();
-            result = result.filter(function(pathway) {
-                return pathway.id.toLowerCase().includes(searchTerm) || 
-                       pathway.name.toLowerCase().includes(searchTerm);
-            });
-        }
-        
-        // Apply pathway type filter
-        if (filters.pathwayType && filters.pathwayType !== 'all') {
-            const typeFilter = filters.pathwayType.toLowerCase();
-            result = result.filter(function(pathway) {
-                return pathway.type === typeFilter || 
-                       (typeFilter === 'pwy' && pathway.type === 'metacyc');
-            });
-        }
-        
-        // Apply sorting
-        if (filters.sortField) {
-            result.sort(function(a, b) {
-                if (filters.sortField === 'id') {
-                    return a.id.localeCompare(b.id);
-                } else if (filters.sortField === 'name') {
-                    return a.name.localeCompare(b.name);
-                } else if (filters.sortField === 'abundance') {
-                    return b.avgAbundance - a.avgAbundance;
-                }
-                return 0;
-            });
-        }
-        
-        return result;
-    };
-    
-    /**
-     * Clear all data
-     */
-    service.clearData = function() {
-        service.pathways = [];
-        service.samples = [];
-        service.hasData = false;
-        service.dataStats = {
-            totalPathways: 0,
-            totalSamples: 0,
-            metacycPathways: 0,
-            unmappedPercent: 0,
-            maxAbundance: 0,
-            avgAbundance: 0
         };
         
-        // Reset file info
-        fileInfo = {
-            name: null,
-            size: 0,
-            lastModified: null
+        /**
+         * Apply filters to pathways
+         * @param {Object} filters - Filter criteria
+         */
+        service.applyFilters = function(filters) {
+            // Start with all pathways
+            let filtered = service.pathways.slice();
+            
+            // Apply search term filter
+            if (filters.searchTerm) {
+                const searchTerm = filters.searchTerm.toLowerCase();
+                filtered = filtered.filter(function(pathway) {
+                    return pathway.id.toLowerCase().includes(searchTerm) || 
+                           pathway.name.toLowerCase().includes(searchTerm);
+                });
+            }
+            
+            // Apply pathway type filter
+            if (filters.pathwayType && filters.pathwayType !== 'all') {
+                const typeFilter = filters.pathwayType.toLowerCase();
+                filtered = filtered.filter(function(pathway) {
+                    if (typeFilter === 'metacyc' || typeFilter === 'pwy') {
+                        return pathway.type === 'metacyc';
+                    }
+                    return pathway.type === typeFilter;
+                });
+            }
+            
+            // Apply sort
+            if (filters.sortField) {
+                filtered.sort(function(a, b) {
+                    if (filters.sortField === 'id') {
+                        return a.id.localeCompare(b.id);
+                    } else if (filters.sortField === 'name') {
+                        return a.name.localeCompare(b.name);
+                    } else if (filters.sortField === 'abundance') {
+                        return b.avgAbundance - a.avgAbundance;
+                    }
+                    return 0;
+                });
+            }
+            
+            // Broadcast filters applied event
+            EventService.emit('filters:applied', {
+                filters: filters,
+                pathways: filtered
+            });
+            
+            return filtered;
         };
-    };
-    
-    /**
-     * Get file information
-     * @returns {Object} - File information
-     */
-    service.getFileInfo = function() {
-        return fileInfo;
-    };
-    
-    // Add utility method to get pathway display name
-    service.getPathwayDisplayName = function(pathway) {
-        if (!pathway) return '';
         
-        // For many MetaCyc pathways, the name might include the ID
-        // This extracts just the descriptive part
-        const name = pathway.name;
-        if (name.includes(pathway.id)) {
-            return name.replace(pathway.id, '').trim();
+        
+        /**
+         * Get filtered pathways
+         * @returns {Array} - Filtered pathway objects
+         */
+        service.getFilteredPathways = function() {
+            console.log('getFilteredPathways called, pathways count:', service.pathways.length);
+            // If we have a filterCache, use it, otherwise return all pathways
+            const result = service.filterCache || service.pathways;
+            console.log('Returning filtered pathways, count:', result.length);
+            return result;
+        };
+
+        /**
+         * Get all samples
+         * @returns {Array} - Sample names
+         */
+        service.getSamples = function() {
+            return service.samples;
+        };
+        
+        /**
+         * Get statistics
+         * @returns {Object} - Stats object
+         */
+        service.getStats = function() {
+            return service.dataStats;
+        };
+        
+        /**
+         * Select a pathway
+         * @param {Object} pathway - Pathway to select
+         */
+        service.selectPathway = function(pathway) {
+            service.selectedPathway = pathway;
+            EventService.emit('pathway:selected', pathway);
+        };
+        
+        /**
+         * Get top samples for a pathway
+         * @param {Object} pathway - Pathway object
+         * @param {Number} limit - Maximum samples to return
+         * @returns {Array} - Array of sample objects
+         */
+        service.getTopSamples = function(pathway, limit) {
+            if (!pathway) return [];
+            
+            limit = limit || 10;
+            
+            // Get samples with abundance
+            const samples = Object.keys(pathway.abundanceValues)
+                .map(sample => ({
+                    name: sample,
+                    abundance: pathway.abundanceValues[sample]
+                }))
+                .sort((a, b) => b.abundance - a.abundance)
+                .slice(0, limit);
+            
+            // Calculate relative percentage
+            if (samples.length > 0) {
+                const maxAbundance = samples[0].abundance;
+                samples.forEach(sample => {
+                    sample.relativePercent = (sample.abundance / maxAbundance) * 100;
+                });
+            }
+            
+            return samples;
+        };
+        
+        /**
+         * Find similar pathways based on abundance patterns
+         * @param {Object} pathway - Reference pathway
+         * @param {Number} limit - Maximum pathways to return
+         * @returns {Array} - Array of similar pathways
+         */
+        service.findSimilarPathways = function(pathway, limit) {
+            if (!pathway) return [];
+            
+            limit = limit || 10;
+            
+            // Create a copy of pathways that excludes the reference pathway
+            const otherPathways = service.pathways.filter(p => p.id !== pathway.id);
+            
+            // Calculate similarity scores (using correlation of abundance patterns)
+            const pathwaysWithScores = otherPathways.map(p => {
+                const score = calculateSimilarity(pathway, p);
+                return {
+                    pathway: p,
+                    score: score
+                };
+            });
+            
+            // Sort by similarity score (descending)
+            pathwaysWithScores.sort((a, b) => b.score - a.score);
+            
+            // Return top matches
+            return pathwaysWithScores.slice(0, limit).map(item => item.pathway);
+        };
+        
+        /**
+         * Calculate similarity between two pathways
+         * @param {Object} pathway1 - First pathway
+         * @param {Object} pathway2 - Second pathway
+         * @returns {Number} - Similarity score (0-1)
+         */
+        function calculateSimilarity(pathway1, pathway2) {
+            // Use all samples that exist in both pathways
+            const commonSamples = service.samples.filter(sample => 
+                pathway1.abundanceValues[sample] !== undefined && 
+                pathway2.abundanceValues[sample] !== undefined
+            );
+            
+            if (commonSamples.length === 0) return 0;
+            
+            // Use simple dot product similarity for quick calculation
+            let dotProduct = 0;
+            let magnitude1 = 0;
+            let magnitude2 = 0;
+            
+            commonSamples.forEach(sample => {
+                const value1 = pathway1.abundanceValues[sample];
+                const value2 = pathway2.abundanceValues[sample];
+                
+                dotProduct += value1 * value2;
+                magnitude1 += value1 * value1;
+                magnitude2 += value2 * value2;
+            });
+            
+            // Prevent division by zero
+            if (magnitude1 === 0 || magnitude2 === 0) return 0;
+            
+            // Return cosine similarity
+            return dotProduct / (Math.sqrt(magnitude1) * Math.sqrt(magnitude2));
         }
         
-        return name;
-    };
-    
-    return service;
-}]);
+        /**
+         * Export pathway data to CSV
+         * @param {Object} pathway - Pathway to export
+         * @returns {String} - CSV content
+         */
+        service.exportPathwayData = function(pathway) {
+            if (!pathway) return null;
+            
+            // Create CSV content
+            let csvContent = 'Sample,Abundance\n';
+            
+            // Add sample data
+            service.samples.forEach(sample => {
+                const abundance = pathway.abundanceValues[sample] || 0;
+                csvContent += `${sample},${abundance}\n`;
+            });
+            
+            return csvContent;
+        };
+        
+        /**
+         * Reset data
+         */
+        service.resetData = function() {
+            service.pathways = [];
+            service.samples = [];
+            service.hasData = false;
+            service.selectedPathway = null;
+            service.dataStats = {
+                totalPathways: 0,
+                totalSamples: 0,
+                metacycPathways: 0,
+                unmappedPercent: 0,
+                maxAbundance: 0,
+                avgAbundance: 0
+            };
+            
+            // Reset file info
+            fileInfo = {
+                name: null,
+                size: 0,
+                lastModified: null
+            };
+            
+            // Broadcast reset event
+            EventService.emit('data:reset');
+        };
+        
+        return service;
+    }]);

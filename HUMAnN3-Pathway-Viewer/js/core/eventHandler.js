@@ -79,24 +79,4 @@ app.service('EventService', ['$rootScope', function($rootScope) {
     this.clearAllListeners = function() {
         eventRegistry = {};
     };
-    
-    // Application-wide events reference
-    this.events = {
-        // Data events
-        DATA_LOADED: 'data:loaded',
-        DATA_PROCESSING: 'data:processing',
-        DATA_RESET: 'data:reset',
-        
-        // Filter events
-        FILTERS_APPLIED: 'filters:applied',
-        
-        // Pathway events
-        PATHWAY_SELECTED: 'pathway:selected',
-        
-        // Visualization events
-        VISUALIZATION_UPDATED: 'visualization:updated',
-        
-        // File events
-        FILE_INFO_UPDATED: 'fileInfo:updated'
-    };
 }]);

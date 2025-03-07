@@ -18,25 +18,25 @@ app.controller('FileUploadController', [
 
         /**
          * Handle file selected via input
-         * @param {FileList} files - Selected files
+         * @param {Object} event - Event containing files
          */
-        $scope.handleFileSelect = function(files) {
-            if (!files || !files.length) return;
+        $scope.handleFileSelect = function(event) {
+            if (!event || !event.files || !event.files.length) return;
             
             // Get first file
-            const file = files[0];
+            const file = event.files[0];
             processFile(file);
         };
         
         /**
          * Handle file dropped on drop zone
-         * @param {FileList} files - Dropped files
+         * @param {Object} event - Event containing files
          */
-        $scope.handleFileDrop = function(files) {
-            if (!files || !files.length) return;
+        $scope.handleFileDrop = function(event) {
+            if (!event || !event.files || !event.files.length) return;
             
             // Get first file
-            const file = files[0];
+            const file = event.files[0];
             $scope.isDragging = false;
             processFile(file);
         };
@@ -81,6 +81,9 @@ app.controller('FileUploadController', [
             $scope.processingProgress = 0;
             
             setFileStatus('info', 'Reading file...', 'fas fa-spinner fa-spin');
+            
+            // Reset any previous data
+            DataManager.resetData();
             
             // Update DataManager with file info
             DataManager.setFileInfo(file);
@@ -144,13 +147,15 @@ app.controller('FileUploadController', [
                 });
         }
         
-        /**
+/**
          * Process parsed data
          * @param {Array} data - Parsed data rows
          * @param {Array} headers - Column headers
          */
         function processData(data, headers) {
             try {
+                console.log('Processing data rows:', data.length, 'headers:', headers);
+                
                 // Subscribe to data processing progress updates
                 const progressListener = EventService.on('data:processing', function(info) {
                     $scope.$apply(function() {
@@ -170,9 +175,19 @@ app.controller('FileUploadController', [
                     $scope.processingProgress = 100;
                     
                     const stats = DataManager.getStats();
+                    console.log('Data loaded successfully, stats:', stats);
+                    
                     setFileStatus('success', 
                         `Successfully loaded ${FormattersService.formatNumber(stats.totalPathways)} pathways across ${stats.totalSamples} samples.`, 
                         'fas fa-check-circle');
+                    
+                    // Force a filter application to make sure pathway list is populated
+                    console.log('Triggering initial filter application');
+                    EventService.emit('data:loaded', {
+                        pathways: DataManager.pathways,
+                        samples: DataManager.samples,
+                        stats: stats
+                    });
                     
                     // Clean up memory
                     OptimizationService.memory.triggerCleanup();
@@ -191,11 +206,18 @@ app.controller('FileUploadController', [
          * @param {String} icon - Icon class
          */
         function setFileStatus(type, message, icon) {
-            $scope.$apply(function() {
+            // Use $apply only if not already in digest cycle
+            if (!$scope.$phase && !$scope.$root.$phase) {
+                $scope.$apply(function() {
+                    $scope.fileStatus = message;
+                    $scope.fileStatusClass = 'file-' + type;
+                    $scope.fileStatusIcon = icon;
+                });
+            } else {
                 $scope.fileStatus = message;
                 $scope.fileStatusClass = 'file-' + type;
                 $scope.fileStatusIcon = icon;
-            });
+            }
         }
         
         // Initialize controller
