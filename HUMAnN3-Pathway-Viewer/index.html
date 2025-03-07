@@ -113,7 +113,6 @@
                 </div>
             </div>
         </section>
-        
         <!-- Main Application Content -->
         <section class="app-content" id="app-content" ng-show="dataManager.hasData" ng-cloak>
             <div class="container-fluid">
@@ -162,9 +161,9 @@
                                             <div class="search-bar d-flex">
                                                 <div class="input-group">
                                                     <input type="text" id="search-input" class="form-control" 
-                                                           placeholder="Search pathway..." 
-                                                           ng-model="filters.searchTerm" 
-                                                           ng-keyup="$event.keyCode === 13 && applyFilters()">
+                                                        placeholder="Search pathway..." 
+                                                        ng-model="filters.searchTerm" 
+                                                        ng-keyup="$event.keyCode === 13 && applyFilters()">
                                                     <button class="btn btn-primary" id="search-btn" ng-click="applyFilters()">
                                                         <i class="fas fa-search"></i>
                                                     </button>
@@ -219,7 +218,6 @@
                         </div>
                     </div>
                 </div>
-                
                 <!-- Main Content -->
                 <div class="row g-4 mb-4">
                     <!-- Pathway List -->
@@ -238,7 +236,7 @@
                                     </button>
                                 </div>
                             </div>
-<div class="pathway-list" id="pathway-list">
+                            <div class="pathway-list" id="pathway-list">
                                 <div class="loading text-center p-5" ng-if="isLoading">
                                     <div class="spinner-border text-primary" role="status">
                                         <span class="visually-hidden">Loading...</span>
@@ -251,11 +249,11 @@
                                     <p>No matching pathways found. Try adjusting your filters.</p>
                                 </div>
                                 
-                                <div class="pathway-list-content" virtual-scroll="filteredPathways" ng-if="!isLoading && filteredPathways.length > 0">
+                                <div class="pathway-list-content" ng-if="!isLoading && filteredPathways.length > 0">
                                     <div class="pathway-item" 
-                                         ng-repeat="pathway in displayedPathways" 
-                                         ng-class="{'selected': pathway.id === selectedPathwayId, 'compact': viewMode === 'compact'}"
-                                         ng-click="selectPathway(pathway)">
+                                        ng-repeat="pathway in displayedPathways" 
+                                        ng-class="{'selected': pathway.id === selectedPathwayId, 'compact': viewMode === 'compact'}"
+                                        ng-click="selectPathway(pathway)">
                                         <div class="pathway-header">
                                             <span class="pathway-id">{{pathway.id}}</span>
                                             <span class="pathway-name">{{pathway.name}}</span>
@@ -347,7 +345,7 @@
                                     </li>
                                 </ul>
                             </div>
-                            
+
                             <div class="card-body">
                                 <div class="tab-content">
                                     <!-- Pathway Detail Tab -->
@@ -445,7 +443,104 @@
                                             </div>
                                         </div>
                                     </div>
-<!-- Visualization Tab -->
+                                    <div class="card-body">
+                                        <div class="tab-content">
+                                            <!-- Pathway Detail Tab -->
+                                            <div class="tab-pane fade show active" id="detail-content" role="tabpanel" aria-labelledby="detail-tab">
+                                                <div class="no-selection text-center p-5" ng-if="!selectedPathway">
+                                                    <i class="fas fa-arrow-left fa-3x mb-3 text-muted"></i>
+                                                    <p>Select a pathway from the list to view details</p>
+                                                </div>
+                                                
+                                                <div class="pathway-detail" ng-if="selectedPathway">
+                                                    <div class="detail-header">
+                                                        <h3>{{selectedPathway.name}}</h3>
+                                                        <span class="pathway-type type-{{selectedPathway.type}}">
+                                                            {{selectedPathway.type | capitalize}}
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="detail-info">
+                                                                <h5>Pathway Information</h5>
+                                                                <table class="table table-sm">
+                                                                    <tbody>
+                                                                        <tr>
+                                                                            <th scope="row">ID</th>
+                                                                            <td>{{selectedPathway.id}}</td>
+                                                                        </tr>
+                                                                        <tr>
+                                                                            <th scope="row">Type</th>
+                                                                            <td>{{selectedPathway.type | capitalize}}</td>
+                                                                        </tr>
+                                                                        <tr>
+                                                                            <th scope="row">Average Abundance</th>
+                                                                            <td>{{selectedPathway.avgAbundance | formatNumber:5}}</td>
+                                                                        </tr>
+                                                                        <tr>
+                                                                            <th scope="row">Max Abundance</th>
+                                                                            <td>{{selectedPathway.maxAbundance | formatNumber:5}} ({{selectedPathway.maxSample}})</td>
+                                                                        </tr>
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="detail-info">
+                                                                <h5>Quick View</h5>
+                                                                <div class="quick-chart-container">
+                                                                    <canvas id="quick-chart" height="200"></canvas>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="detail-info mt-4">
+                                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                                            <h5>
+                                                                Sample Abundance
+                                                                <small class="text-muted">(Top {{sampleDisplayLimit}})</small>
+                                                            </h5>
+                                                            <button class="btn btn-sm btn-outline-primary" 
+                                                                    ng-click="exportData()">
+                                                                <i class="fas fa-download me-1"></i>Export
+                                                            </button>
+                                                        </div>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm table-hover">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th scope="col">#</th>
+                                                                        <th scope="col">Sample</th>
+                                                                        <th scope="col">Abundance</th>
+                                                                        <th scope="col">Relative</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <tr ng-repeat="sample in topSamples">
+                                                                        <td>{{$index + 1}}</td>
+                                                                        <td>{{sample.name}}</td>
+                                                                        <td>{{sample.abundance | formatNumber:5}}</td>
+                                                                        <td>
+                                                                            <div class="progress" style="height: 8px;">
+                                                                                <div class="progress-bar" 
+                                                                                     role="progressbar" 
+                                                                                     ng-style="{'width': sample.relativePercent + '%'}" 
+                                                                                     aria-valuenow="{{sample.relativePercent}}" 
+                                                                                     aria-valuemin="0" 
+                                                                                     aria-valuemax="100">
+                                                                                </div>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <!-- Visualization Tab -->
                                     <div class="tab-pane fade" id="visualization-content" role="tabpanel" aria-labelledby="visualization-tab">
                                         <div class="no-selection text-center p-5" ng-if="!selectedPathway">
                                             <i class="fas fa-chart-bar fa-3x mb-3 text-muted"></i>
@@ -549,7 +644,7 @@
                                                             ng-model="comparisonOptions.samples" 
                                                             multiple 
                                                             ng-change="updateComparison()">
-                                                        <option ng-repeat="sample in topSamples | limitTo:20" value="{{sample.name}}">
+                                                        <option ng-repeat="sample in $parent.topSamples | limitTo:20" value="{{sample.name}}">
                                                             {{sample.name}}
                                                         </option>
                                                     </select>
@@ -576,7 +671,7 @@
             <p class="mb-0">HUMAnN3 Pathway Abundance Viewer | <a href="https://github.com/biobakery/humann" target="_blank">HUMAnN3 Documentation</a></p>
         </div>
     </footer>
-    
+
     <!-- External JS Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
