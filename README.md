@@ -8,6 +8,7 @@ The ADAM-1 framework comprises three primary agents:
 <p align="center">
   <img src="https://github.com/user-attachments/assets/8d0ac0ea-a159-427a-bf62-c9db84f78260" alt="ADAM-1 Architecture" width="80%">
 </p>
+
 1. **Computation Agent**: This agent focuses on machine learning and computational biology to process and analyze complex datasets. It employs advanced algorithms to identify patterns and correlations within the data, contributing to the detection and understanding of AD.
 
 2. **Summarization Agent**: This agent utilizes reasoning logic to interpret data processed by the Computation Agent. Through a Chain of Thoughts design, it generates coherent and concise summaries of the findings, facilitating easier comprehension and further analysis.
