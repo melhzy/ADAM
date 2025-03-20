@@ -1,41 +1,43 @@
-# ADAM-1: Alzheimer's Disease Analysis Model Generation 1
+# ADAM-1: Advanced Data Analysis and Modeling for Alzheimer's Disease
 
-## Overview
-
-ADAM-1 is a multi-agent large language model (LLM) framework designed to enhance the understanding and detection of Alzheimer's disease (AD) by integrating and analyzing multi-modal data sources. These sources include microbiome profiles, clinical datasets, and external knowledge bases. The framework leverages retrieval-augmented generation (RAG) techniques and a multi-agent architecture to synthesize insights from diverse data, contextualizing findings with literature-driven evidence. :contentReference[oaicite:0]{index=0}
+ADAM-1 is a comprehensive framework designed to enhance our understanding of Alzheimer's Disease (AD) through the integration of advanced data analysis, machine learning, and reasoning techniques. By leveraging multi-agent systems, ADAM-1 aims to process complex datasets, summarize critical information, and classify findings to support research and clinical decision-making.
 
 ## Architecture
 
 The ADAM-1 framework comprises three primary agents:
 
-1. **Computation Agent**: This agent focuses on machine learning and computational biology to process and analyze complex datasets. It employs advanced algorithms to identify patterns and correlations within the data, contributing to the detection and understanding of AD.&#8203;:contentReference[oaicite:1]{index=1}
+1. **Computation Agent**: This agent focuses on machine learning and computational biology to process and analyze complex datasets. It employs advanced algorithms to identify patterns and correlations within the data, contributing to the detection and understanding of AD.
 
-2. **Summarization Agent**: :contentReference[oaicite:2]{index=2}&#8203;:contentReference[oaicite:3]{index=3}
+2. **Summarization Agent**: This agent utilizes reasoning logic to interpret data processed by the Computation Agent. Through a Chain of Thoughts design, it generates coherent and concise summaries of the findings, facilitating easier comprehension and further analysis.
 
-3. **Classification Agent**: :contentReference[oaicite:4]{index=4}&#8203;:contentReference[oaicite:5]{index=5}
+3. **Classification Agent**: Building upon the summaries provided by the Summarization Agent, this agent applies reasoning logic to categorize the information. Using the Chain of Thoughts approach, it ensures that classifications are logical and transparent, aiding in accurate diagnosis and treatment planning.
 
-:contentReference[oaicite:6]{index=6}&#8203;:contentReference[oaicite:7]{index=7}
+The interaction among these agents ensures a seamless flow from data analysis to summarization and classification, enhancing the overall understanding of Alzheimer's Disease.
 
 ## Key Features
 
-- **Multi-Modal Data Integration**: :contentReference[oaicite:8]{index=8}&#8203;:contentReference[oaicite:9]{index=9}
+- **Multi-Modal Data Integration**: ADAM-1 integrates diverse data sources, including genetic, clinical, and imaging data, to provide a holistic view of Alzheimer's Disease.
 
-- **Retrieval-Augmented Generation (RAG)**: :contentReference[oaicite:10]{index=10}&#8203;:contentReference[oaicite:11]{index=11}
+- **Retrieval-Augmented Generation (RAG)**: By combining retrieval systems with generative models, ADAM-1 ensures that the most relevant and accurate information is utilized in analyses.
 
-- **Robust Performance**: :contentReference[oaicite:12]{index=12} :contentReference[oaicite:13]{index=13}&#8203;:contentReference[oaicite:14]{index=14}
-- ![image](https://github.com/user-attachments/assets/39a89a62-29bb-42bc-a4f2-8583bc36ab43)
-- ![image](https://github.com/user-attachments/assets/b1eb170c-f32d-4d01-a0a6-c8e3488d6559)
+- **Robust Performance**: The framework is designed for scalability and efficiency, capable of handling large datasets and complex computations without compromising performance.
+
+## Visual Overview
+
+<img src="https://github.com/user-attachments/assets/39a89a62-29bb-42bc-a4f2-8583bc36ab43" alt="ADAM-1 Architecture Diagram" style="width:60%;">
+
+<img src="https://github.com/user-attachments/assets/b1eb170c-f32d-4d01-a0a6-c8e3488d6559" alt="Data Flow in ADAM-1" style="width:60%;">
 
 ## Hardware and Software
-The experiments were conducted on an Ubuntu 24.04.2 LTS workstation equipped with an Intel® Core™ i9-10900X (20 threads), 128 GB RAM, and four NVIDIA GeForce RTX™ 3090 GPUs, providing a robust computing environment for LLM and machine learning tasks. The software stack was built on Python 3.10.14, utilizing XGBoost 2.1.3, and Scikit-Learn 1.5.2 for model training, with Optuna 4.1.0 handling hyperparameter optimization.
-For LLM processing, the system integrated OpenAI 1.55.1, PandasAI 2.4.2, LangChain 0.3.8, and LangChain-Chroma 0.1.4. Additionally, Scikit-Bio 0.6.2, SciPy 1.10.1, NumPy 1.26.4, and Pandas 1.5.3 facilitated data processing and analysis. For visualization and interpretability, the setup included Matplotlib 3.7.5, Seaborn 0.12.2, and SHAP 0.46.0. This configuration ensured high computational efficiency and scalability for deep learning workflows.
+
+The experiments were conducted on an Ubuntu 24.04.2 LTS workstation equipped with an Intel® Core™ i9-10900X (20 threads), 128 GB RAM, and four NVIDIA GeForce RTX™ 3090 GPUs, providing a robust computing environment for LLM and machine learning tasks. The software stack was built on Python 3.10.14, utilizing XGBoost 2.1.3, and Scikit-Learn 1.5.2 for model training, with Optuna 4.1.0 handling hyperparameter optimization. For LLM processing, the system integrated OpenAI 1.55.1, PandasAI 2.4.2, LangChain 0.3.8, and LangChain-Chroma 0.1.4. Additionally, Scikit-Bio 0.6.2, SciPy 1.10.1, NumPy 1.26.4, and Pandas 1.5.3 facilitated data processing and analysis. For visualization and interpretability, the setup included Matplotlib 3.7.5, Seaborn 0.12.2, and SHAP 0.46.0. This configuration ensured high computational efficiency and scalability for deep learning workflows.
 
 ## Future Directions
 
-:contentReference[oaicite:15]{index=15}&#8203;:contentReference[oaicite:16]{index=16}
+Future iterations of ADAM-1 aim to incorporate additional data modalities, such as neuroimaging and biomarkers, to broaden its scalability and applicability for Alzheimer's research and diagnostics. :contentReference[oaicite:7]{index=7}
 
 ## Conclusion
 
-:contentReference[oaicite:17]{index=17}&#8203;:contentReference[oaicite:18]{index=18}
+ADAM-1 represents a significant advancement in the integration of AI and bioinformatics for Alzheimer's disease detection and analysis. Its multi-agent architecture and RAG techniques provide a robust framework for synthesizing insights from diverse data sources, offering a promising tool for researchers and clinicians in the field of neurodegenerative diseases. :contentReference[oaicite:8]{index=8}
 
-For more detailed information, please refer to the full paper: :contentReference[oaicite:19]{index=19}
+For more detailed information, please refer to the full paper: :contentReference[oaicite:9]{index=9}
