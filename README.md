@@ -4,10 +4,11 @@ Alzheimer's Disease Analysis Model (ADAM) is a comprehensive framework designed 
 
 ## Architecture
 
-The ADAM-1 framework comprises three primary agents:
 <p align="center">
   <img src="https://github.com/user-attachments/assets/8d0ac0ea-a159-427a-bf62-c9db84f78260" alt="ADAM-1 Architecture" width="80%">
 </p>
+
+The ADAM-1 framework comprises three AI agents:
 
 1. **Computation Agent**: This agent focuses on machine learning and computational biology to process and analyze complex datasets. It employs advanced algorithms to identify patterns and correlations within the data, contributing to the detection and understanding of AD.
 
