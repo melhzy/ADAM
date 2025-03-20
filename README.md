@@ -45,4 +45,5 @@ Future iterations of ADAM-1 aim to incorporate additional data modalities, such 
 
 ADAM-1 represents a significant advancement in the integration of AI and bioinformatics for Alzheimer's disease detection and analysis. Its multi-agent architecture and RAG techniques provide a robust framework for synthesizing insights from diverse data sources, offering a promising tool for researchers and clinicians in the field of neurodegenerative diseases. :contentReference[oaicite:8]{index=8}
 
-For more detailed information, please refer to the full paper: :contentReference[oaicite:9]{index=9}
+For more detailed information, please refer to the full paper: 
+https://doi.org/10.48550/arXiv.2501.08324
