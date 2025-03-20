@@ -39,7 +39,7 @@ The experiments were conducted on an Ubuntu 24.04.2 LTS workstation equipped wit
 
 ## Future Directions
 
-Future iterations of ADAM-1 aim to incorporate additional data modalities, such as neuroimaging and biomarkers, to broaden its scalability and applicability for Alzheimer's research and diagnostics. :contentReference[oaicite:7]{index=7}
+Future iterations of ADAM-1 aim to incorporate additional data modalities, such as neuroimaging and biomarkers, to broaden its scalability and applicability for Alzheimer's research and diagnostics.
 
 ## Conclusion
 
