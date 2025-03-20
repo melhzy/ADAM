@@ -12,6 +12,10 @@ The ADAM-1 framework comprises three primary agents:
 
 3. **Classification Agent**: Building upon the summaries provided by the Summarization Agent, this agent applies reasoning logic to categorize the information. Using the Chain of Thoughts approach, it ensures that classifications are logical and transparent, aiding in accurate diagnosis and treatment planning.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/8d0ac0ea-a159-427a-bf62-c9db84f78260" alt="ADAM-1 Architecture" width="80%">
+</p>
+
 The interaction among these agents ensures a seamless flow from data analysis to summarization and classification, enhancing the overall understanding of Alzheimer's Disease.
 
 ## Key Features
@@ -25,11 +29,11 @@ The interaction among these agents ensures a seamless flow from data analysis to
 ## Visual Overview
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/39a89a62-29bb-42bc-a4f2-8583bc36ab43" alt="ADAM-1 Architecture Diagram" width="80%">
+  <img src="https://github.com/user-attachments/assets/39a89a62-29bb-42bc-a4f2-8583bc36ab43" alt="Comparative Analysis of XGBoost and ADAM" width="80%">
 </p>
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/b1eb170c-f32d-4d01-a0a6-c8e3488d6559" alt="Data Flow in ADAM-1" width="80%">
+  <img src="https://github.com/user-attachments/assets/b1eb170c-f32d-4d01-a0a6-c8e3488d6559" alt="Performance Comparison of F1 Scores Between XGBoost and ADAM" width="80%">
 </p>
 
 
