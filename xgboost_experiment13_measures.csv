@@ -1,2 +1,0 @@
-Model,Seed,Experiment_Number,Accuracy,AUC,F1_Score
-xgboost,236793113,13,0.7,0.7000000000000002,0.6666666666666666
