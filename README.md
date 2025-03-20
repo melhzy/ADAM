@@ -5,7 +5,9 @@ ADAM-1 is a comprehensive framework designed to enhance our understanding of Alz
 ## Architecture
 
 The ADAM-1 framework comprises three primary agents:
-
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/8d0ac0ea-a159-427a-bf62-c9db84f78260" alt="ADAM-1 Architecture" width="80%">
+</p>
 1. **Computation Agent**: This agent focuses on machine learning and computational biology to process and analyze complex datasets. It employs advanced algorithms to identify patterns and correlations within the data, contributing to the detection and understanding of AD.
 
 2. **Summarization Agent**: This agent utilizes reasoning logic to interpret data processed by the Computation Agent. Through a Chain of Thoughts design, it generates coherent and concise summaries of the findings, facilitating easier comprehension and further analysis.
@@ -13,7 +15,7 @@ The ADAM-1 framework comprises three primary agents:
 3. **Classification Agent**: Building upon the summaries provided by the Summarization Agent, this agent applies reasoning logic to categorize the information. Using the Chain of Thoughts approach, it ensures that classifications are logical and transparent, aiding in accurate diagnosis and treatment planning.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/8d0ac0ea-a159-427a-bf62-c9db84f78260" alt="ADAM-1 Architecture" width="80%">
+  <img src="https://github.com/user-attachments/assets/ae3ca2f4-5136-4206-adc4-e3b83e4af7d8" alt=" Agentic Systems Architecture" width="80%">
 </p>
 
 The interaction among these agents ensures a seamless flow from data analysis to summarization and classification, enhancing the overall understanding of Alzheimer's Disease.
