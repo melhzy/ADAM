@@ -24,9 +24,14 @@ The interaction among these agents ensures a seamless flow from data analysis to
 
 ## Visual Overview
 
-<img src="https://github.com/user-attachments/assets/39a89a62-29bb-42bc-a4f2-8583bc36ab43" alt="ADAM-1 Architecture Diagram" style="width:60%;">
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/39a89a62-29bb-42bc-a4f2-8583bc36ab43" alt="ADAM-1 Architecture Diagram" width="80%">
+</p>
 
-<img src="https://github.com/user-attachments/assets/b1eb170c-f32d-4d01-a0a6-c8e3488d6559" alt="Data Flow in ADAM-1" style="width:60%;">
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b1eb170c-f32d-4d01-a0a6-c8e3488d6559" alt="Data Flow in ADAM-1" width="80%">
+</p>
+
 
 ## Hardware and Software
 
