@@ -5,7 +5,7 @@ Alzheimer's Disease Analysis Model (ADAM) is a comprehensive framework designed 
 ## Architecture
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/8d0ac0ea-a159-427a-bf62-c9db84f78260" alt="ADAM-1 Architecture" width="80%">
+  <img src="https://github.com/user-attachments/assets/e154ef63-80ef-4bc7-9df1-91dcf2bce36e" alt="ADAM-1 Architecture" width="80%">
 </p>
 
 The ADAM-1 framework comprises three AI agents:
