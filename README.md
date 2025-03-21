@@ -17,7 +17,7 @@ The ADAM-1 framework comprises three AI agents:
 3. **Classification Agent**: Building upon the summaries provided by the Summarization Agent, this agent applies reasoning logic to categorize the information. Using the Chain of Thoughts approach, it ensures that classifications are logical and transparent, aiding in accurate diagnosis and treatment planning.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/f5a2076d-139a-4f34-a949-4f2a9d176c52" alt=" Agentic Systems Architecture" width="80%">
+  <img src="https://github.com/user-attachments/assets/09fdf5c2-d8e5-4016-9259-13ebe8788fe5" alt=" Agentic Systems Architecture" width="80%">
 </p>
 
 The interaction among these agents ensures a seamless flow from data analysis to summarization and classification, enhancing the overall understanding of Alzheimer's Disease.
