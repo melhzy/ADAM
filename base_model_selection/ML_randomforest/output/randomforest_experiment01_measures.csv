@@ -1,0 +1,2 @@
+Model,Seed,Experiment_Number,Accuracy,AUC,F1_Score
+randomforest,315491657,1,0.8076923076923077,0.8694444444444445,0.782608695652174

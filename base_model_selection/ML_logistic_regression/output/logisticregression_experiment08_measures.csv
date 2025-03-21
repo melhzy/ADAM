@@ -1,0 +1,2 @@
+Model,Seed,Experiment_Number,Accuracy,AUC,F1_Score
+logisticregression,513873336,8,0.6623376623376623,0.6953846153846154,0.5185185185185185
