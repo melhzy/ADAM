@@ -1,5 +1,6 @@
 # ADAM-1: An AI Reasoning and Bioinformatics Model for Alzheimer’s Detection and Microbiome-Clinical Data Integration
 
+## Copyright
 © 2025 University of Massachusetts
 
 Alzheimer's Disease Analysis Model (ADAM) is a comprehensive framework designed to enhance our understanding of Alzheimer's Disease (AD) through the integration of advanced data analysis, machine learning, and reasoning techniques. By leveraging multi-agent systems, ADAM-1, as the first generation of this agentic AI system, aims to process complex datasets, summarize critical information, and classify findings to support research and clinical decision-making.
