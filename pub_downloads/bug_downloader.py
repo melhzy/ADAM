@@ -37,7 +37,7 @@ def get_bug_information(bug, email, repository):
 def main():
     parser = argparse.ArgumentParser(description="Fetch information about a specified bug from PubMed")
     parser.add_argument("--bug_name", type=str, default="Escherichia coli", help="Name of the bug to search")
-    parser.add_argument("--email", type=str, default="Ziyuan.Huang2@umassmed.edu", help="Email address to use with Entrez")
+    parser.add_argument("--email", type=str, default="first.name@university.edu", help="Email address to use with Entrez")
     parser.add_argument("--repository", type=str, default="bug_info", help="Directory to save the fetched information")
     args = parser.parse_args()
 
