@@ -63,14 +63,4 @@ DOI: 10.1109/ACCESS.2025.3599857
 
 Huang, Z., Sekhon, V. K., Sadeghian, R., Vaida, M. L., Jo, C., McCormick, B. A., Ward, D. V., Bucci, V., & Haran, J. P. (2025). ADAM-1: An AI reasoning and bioinformatics model for Alzheimer’s disease detection and microbiome-clinical data integration. IEEE Access, 13, 145953–145967. https://doi.org/10.1109/ACCESS.2025.3599857
 
-@article{huang2025adam1,
-  title     = {ADAM-1: An AI reasoning and bioinformatics model for Alzheimer’s disease detection and microbiome-clinical data integration},
-  author    = {Huang, Ziyuan and Sekhon, Vishaldeep Kaur and Sadeghian, Roozbeh and Vaida, Maria L. and Jo, Cynthia and McCormick, Beth A. and Ward, Doyle V. and Bucci, Vanni and Haran, John P.},
-  journal   = {IEEE Access},
-  volume    = {13},
-  pages     = {145953--145967},
-  year      = {2025},
-  publisher = {IEEE},
-  doi       = {10.1109/ACCESS.2025.3599857},
-  url       = {https://doi.org/10.1109/ACCESS.2025.3599857}
-}
+``` @article{huang2025adam1, title = {ADAM-1: An AI reasoning and bioinformatics model for Alzheimer’s disease detection and microbiome-clinical data integration}, author = {Huang, Ziyuan and Sekhon, Vishaldeep Kaur and Sadeghian, Roozbeh and Vaida, Maria L. and Jo, Cynthia and McCormick, Beth A. and Ward, Doyle V. and Bucci, Vanni and Haran, John P.}, journal = {IEEE Access}, volume = {13}, pages = {145953--145967}, year = {2025}, publisher = {IEEE}, doi = {10.1109/ACCESS.2025.3599857}, url = {https://doi.org/10.1109/ACCESS.2025.3599857} } ```
