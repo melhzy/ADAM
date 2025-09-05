@@ -57,4 +57,18 @@ Future iterations of ADAM-1 aim to incorporate additional data modalities, such 
 ADAM-1 represents a significant advancement in the integration of AI and bioinformatics for Alzheimer's disease detection and analysis. Its multi-agent architecture and RAG techniques provide a robust framework for synthesizing insights from diverse data sources, offering a promising tool for researchers and clinicians in the field of neurodegenerative diseases.
 
 For more detailed information, please refer to the full paper: 
-https://doi.org/10.48550/arXiv.2501.08324
+DOI: 10.1109/ACCESS.2025.3599857
+
+Huang, Z., Sekhon, V. K., Sadeghian, R., Vaida, M. L., Jo, C., McCormick, B. A., Ward, D. V., Bucci, V., & Haran, J. P. (2025). ADAM-1: An AI reasoning and bioinformatics model for Alzheimer’s disease detection and microbiome-clinical data integration. IEEE Access, 13, 145953–145967. https://doi.org/10.1109/ACCESS.2025.3599857
+
+@article{huang2025adam1,
+  title     = {ADAM-1: An AI reasoning and bioinformatics model for Alzheimer’s disease detection and microbiome-clinical data integration},
+  author    = {Huang, Ziyuan and Sekhon, Vishaldeep Kaur and Sadeghian, Roozbeh and Vaida, Maria L. and Jo, Cynthia and McCormick, Beth A. and Ward, Doyle V. and Bucci, Vanni and Haran, John P.},
+  journal   = {IEEE Access},
+  volume    = {13},
+  pages     = {145953--145967},
+  year      = {2025},
+  publisher = {IEEE},
+  doi       = {10.1109/ACCESS.2025.3599857},
+  url       = {https://doi.org/10.1109/ACCESS.2025.3599857}
+}
