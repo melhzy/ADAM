@@ -59,6 +59,8 @@ ADAM-1 represents a significant advancement in the integration of AI and bioinfo
 For more detailed information, please refer to the full paper: 
 DOI: 10.1109/ACCESS.2025.3599857
 
+## Citation
+
 Huang, Z., Sekhon, V. K., Sadeghian, R., Vaida, M. L., Jo, C., McCormick, B. A., Ward, D. V., Bucci, V., & Haran, J. P. (2025). ADAM-1: An AI reasoning and bioinformatics model for Alzheimer’s disease detection and microbiome-clinical data integration. IEEE Access, 13, 145953–145967. https://doi.org/10.1109/ACCESS.2025.3599857
 
 @article{huang2025adam1,
