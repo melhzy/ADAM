@@ -1,0 +1,3329 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+import os
+from glob import glob
+import hashlib
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from copy import deepcopy
+import ipynbname
+import matplotlib.pyplot as plt
+import shap
+from datetime import datetime
+import re
+import platform
+import time
+import requests
+from urllib3.exceptions import NewConnectionError, MaxRetryError
+
+# Constants
+EXPERIMENT_NAME = "nursing_home"
+DATA_PATH = f"..{os.sep}data{os.sep}"
+
+
+# In[2]:
+
+
+current_time = datetime.now()
+print("Current time is:",current_time)
+
+nb_fname = ipynbname.name()
+print("File:",nb_fname)
+
+experiment_number = int(re.findall(r'\d+', nb_fname)[0])
+print(f"Experiment Number: {experiment_number}")  # Output: 01
+
+
+# In[3]:
+
+
+# Function to generate a consistent hash number for a given file name
+def generate_hash_number(file_name):
+    """
+    Generates a consistent hash number based on the file name.
+    
+    Args:
+        file_name (str): The file name to hash.
+    
+    Returns:
+        int: A 32-bit hash number.
+    """
+    # Create an MD5 hash object
+    hash_obj = hashlib.md5()
+    
+    # Update the hash object with the file name, encoded to bytes
+    hash_obj.update(file_name.encode())
+
+    # Convert the hash to an integer and ensure the range fits 32-bit
+    return int(hash_obj.hexdigest(), 16) % (2**32)
+
+# Generate experiment seed from experiment name
+initial_seed = generate_hash_number(EXPERIMENT_NAME)
+print(f"Experiment Name: {EXPERIMENT_NAME}, Initial Seed: {initial_seed}")
+
+
+# In[4]:
+
+
+# Set the seed for reproducibility
+np.random.seed(initial_seed)
+
+# Generate a list of 5 random integers in the range of 32-bit integers
+random_integers_list = np.random.randint(low=0, high=2**31 - 1, size=30).tolist()
+print("Random Integers List:", random_integers_list)
+seed = random_integers_list[experiment_number-1]
+# Load clinical microbiome data
+df_path = glob(f'{DATA_PATH}*clinical_microbiome_df*')[0]
+print(f"Data File Path: {df_path}")
+
+clinical_microbiome_df = pd.read_csv(df_path)
+print(f"Clinical Microbiome Data Loaded. Dim: {clinical_microbiome_df.shape}")
+
+# Display value counts for the 'Alzheimers' column
+alzheimers_counts = clinical_microbiome_df['Alzheimers'].value_counts()
+alzheimers_counts_normalized = clinical_microbiome_df['Alzheimers'].value_counts(normalize=True)
+
+print("Alzheimers Counts:\n", alzheimers_counts)
+print("Normalized Alzheimers Counts:\n", alzheimers_counts_normalized)
+print(f"Seed in this experiment: {seed}")
+
+
+# In[5]:
+
+
+clinical_microbiome_df["Dementia Other"].value_counts()
+
+
+# In[6]:
+
+
+clinical_microbiome_df = clinical_microbiome_df[clinical_microbiome_df["Dementia Other"] != 1]
+# Display value counts for the 'Alzheimers' column
+alzheimers_counts = clinical_microbiome_df['Alzheimers'].value_counts()
+alzheimers_counts_normalized = clinical_microbiome_df['Alzheimers'].value_counts(normalize=True)
+print("Alzheimers Counts:\n", alzheimers_counts)
+print("Normalized Alzheimers Counts:\n", alzheimers_counts_normalized)
+
+
+# In[7]:
+
+
+clinical_summaries_df = pd.read_csv(glob(f"..{os.sep}data{os.sep}clinical_summaries_df*")[0])
+clinical_summaries_df
+
+
+# In[8]:
+
+
+clinical_summaries_df['feature_name'].tolist()[:5]
+
+
+# In[9]:
+
+
+clinical_summaries_df[['feature_name']][clinical_summaries_df['feature_name'].str.startswith(('c', 'C'))]
+
+
+# In[10]:
+
+
+bacteria_df = pd.read_csv(glob(f"..{os.sep}data{os.sep}bacteria_df*")[0])
+bacteria_df.species_name.tolist()[:5]
+
+
+# In[11]:
+
+
+set(bacteria_df.species_name.tolist()[:5])
+
+
+# In[12]:
+
+
+clinical_microbiome_df["Dementia Other"].value_counts()
+
+
+# In[13]:
+
+
+import os
+from math import ceil
+from pynvml import nvmlInit, nvmlDeviceGetCount
+
+# Function to get the number of GPUs available
+def get_num_gpus():
+    try:
+        nvmlInit()
+        return nvmlDeviceGetCount()
+    except Exception as e:
+        print(f"Error accessing NVML: {e}")
+        return 0
+
+# Function to list all .ipynb files in the current directory
+def get_notebook_files():
+    return [f for f in os.listdir('.') if f.endswith('.ipynb')]
+
+# Function to evenly distribute files across GPUs
+def distribute_files_evenly(files, num_gpus):
+    """
+    Distributes files evenly across all available GPUs.
+    
+    Args:
+        files (list): List of file names to distribute.
+        num_gpus (int): Number of GPUs available.
+        
+    Returns:
+        dict: Distribution of files per GPU.
+    """
+    distribution = {f"cuda:{i}": [] for i in range(num_gpus)}
+    for idx, file in enumerate(files):
+        # Assign each file to a GPU in round-robin fashion
+        gpu_id = idx % num_gpus
+        distribution[f"cuda:{gpu_id}"].append(file)
+    return distribution
+
+# Function to get GPU ID for a specific notebook file
+def get_gpu_for_file(nb_fname, file_distribution):
+    """
+    Finds the GPU ID for a given notebook file based on the distribution.
+    
+    Args:
+        nb_fname (str): Notebook file name to find the GPU for.
+        file_distribution (dict): Distribution of files per GPU.
+    
+    Returns:
+        str: GPU ID (e.g., "cuda:0") or "Unassigned" if the file is not found.
+    """
+    for gpu, files in file_distribution.items():
+        if nb_fname in files:
+            return gpu
+    return "cpu"
+
+# Main logic for the notebook
+def assign_notebooks_to_gpus():
+    # Get the number of GPUs
+    num_gpus = get_num_gpus()
+    if num_gpus == 0:
+        print("No GPUs available. Using CPU for all tasks.")
+        return {"cpu": get_notebook_files()}
+    
+    # Get the list of .ipynb files
+    notebook_files = get_notebook_files()
+    if not notebook_files:
+        print("No .ipynb files found in the current directory.")
+        return {}
+    
+    # Evenly distribute files across GPUs
+    file_distribution = distribute_files_evenly(notebook_files, num_gpus)
+    
+    # Display the distribution in the notebook
+    for gpu, files in file_distribution.items():
+        print(f"{gpu}: {files}")
+    
+    return file_distribution
+
+# Run the assignment logic
+file_distribution = assign_notebooks_to_gpus()
+
+# Get the GPU ID for the specific notebook file
+device = get_gpu_for_file(f"{nb_fname}.ipynb", file_distribution)
+
+print(f"Initial seed: {initial_seed}")
+print(f"Random Integers List: {random_integers_list}")
+# Print the result
+print(f"Notebook '{nb_fname}.ipynb' is assigned to device: {device} with seed {seed}.")
+
+
+# In[14]:
+
+
+import optuna
+from optuna.samplers import TPESampler
+from xgboost import XGBClassifier
+from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
+from sklearn.feature_selection import SelectFromModel
+from sklearn.metrics import (
+    roc_curve, roc_auc_score, f1_score, accuracy_score, confusion_matrix, 
+    classification_report, ConfusionMatrixDisplay
+)
+
+from sklearn.model_selection import StratifiedKFold
+from sklearn.utils.class_weight import compute_class_weight
+import numpy as np
+from sklearn.model_selection import train_test_split
+from copy import deepcopy
+from sklearn.preprocessing import StandardScaler
+
+# Constants and Configuration
+print(f"Experiment number: {experiment_number} | Seed number: {seed}")
+# seed = experiment_seed  # Replace with your experiment seed
+test_size = 0.25
+gpu_device = "hist"
+
+# Function to check for overlaps between train and test data
+def check_for_overlap(train_data, test_data):
+    """
+    Checks for overlapping Sample ID and study_id between train and test datasets.
+    """
+    # Check for overlapping Study IDs
+    overlap_study_ids = set(train_data["study_id"]) & set(test_data["study_id"])
+    if overlap_study_ids:
+        print(f"Overlap Study ID found: {overlap_study_ids}")
+    else:
+        print("No overlap Study ID found.")
+
+    # Check for overlapping Sample IDs
+    overlap_sample_ids = set(train_data["Sample ID"]) & set(test_data["Sample ID"])
+    if overlap_sample_ids:
+        print(f"Overlap Sample ID found: {overlap_sample_ids}")
+    else:
+        print("No overlap Sample ID found.")
+
+def check_for_bacteria(list_a, list_b):
+    """
+    Checks for overlapping bactertia from list_a and list list_b database and predicted bacteria.
+    """
+    # Check for overlapping Study IDs
+    list_a = [item.replace(" ", "_") for item in list_a]
+    list_b = [item.replace(" ", "_") for item in list_b]
+    
+    overlap_bacteria = set(list_a) & set(list_b)
+    if overlap_bacteria:
+        print(f"Overlap bacteria found: {overlap_bacteria}")
+    else:
+        print("No overlap bacteria found.")
+    return overlap_bacteria
+
+        
+def preprocess_data(df, columns_to_drop, test_size, seed):
+    # Split study IDs into train/test sets
+    study_labels = df.groupby("study_id")["Alzheimers"].max().reset_index()
+    train_ids, test_ids = train_test_split(
+        study_labels["study_id"],
+        test_size=test_size,
+        stratify=study_labels["Alzheimers"],
+        random_state=seed,
+    )
+    
+    train_data = df[df["study_id"].isin(train_ids)].copy()
+    test_data = df[df["study_id"].isin(test_ids)].copy()
+
+    # Check for overlaps
+    check_for_overlap(train_data, test_data)
+    
+    # Select feature columns
+    feature_columns = [col for col in df.columns if col not in columns_to_drop]
+
+    # Convert feature columns to float64 to ensure compatibility
+    train_data[feature_columns] = train_data[feature_columns].astype(np.float64)
+    test_data[feature_columns] = test_data[feature_columns].astype(np.float64)
+
+    # Normalize the feature columns
+    # scaler = StandardScaler()
+    # train_data.loc[:, feature_columns] = scaler.fit_transform(train_data[feature_columns])
+    # test_data.loc[:, feature_columns] = scaler.transform(test_data[feature_columns])
+
+    return train_data, test_data, feature_columns
+
+# Function to compute class weights
+def compute_weights(y_train):
+    class_weights = compute_class_weight("balanced", classes=np.unique(y_train), y=y_train)
+    scale_pos_weight = class_weights[1] / class_weights[0]
+    return scale_pos_weight
+
+# Define Optuna Objective Function
+def objective(trial, X_train, y_train, scale_pos_weight, seed):
+    print(f"Seed in the model {seed} on Device {device}")
+    # Feature selection parameters
+    threshold = trial.suggest_categorical('threshold', ['median', 'mean', '0.5*mean', '1.5*mean', 'very_low'])
+    max_features = trial.suggest_int('max_features', 1, X_train.shape[1])
+    norm_order = trial.suggest_int('norm_order', 1, 2)
+    threshold_value = -1e10 if threshold == 'very_low' else threshold
+
+    # Feature selection
+    selector = SelectFromModel(
+        estimator=XGBClassifier(
+            objective='binary:logistic',
+            eval_metric='logloss',
+            scale_pos_weight= scale_pos_weight,
+            random_state=seed,
+            tree_method=gpu_device, 
+            device=device,
+
+        ),
+        threshold=threshold_value,
+        max_features=max_features,
+        norm_order=norm_order
+    )
+    
+    selector.fit(X_train, y_train)
+    X_train_selected = selector.transform(X_train)
+
+    # Define XGBoost parameters
+    params = {
+        'objective': 'binary:logistic',
+        'eval_metric': 'logloss',
+        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.5),
+        'max_depth': trial.suggest_int('max_depth', 3, 30),
+        'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+        'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+        'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
+        'gamma': trial.suggest_float('gamma', 0, 10),
+        'reg_alpha': trial.suggest_float('reg_alpha', 0, 10),
+        'reg_lambda': trial.suggest_float('reg_lambda', 0, 10),
+        'scale_pos_weight': scale_pos_weight,
+        'seed': seed,
+        'tree_method': gpu_device,
+        'device': device,
+
+    }
+
+    # Cross-validation
+    skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=seed)
+    f1_scores = []
+    for train_idx, val_idx in skf.split(X_train_selected, y_train):
+        X_train_fold, X_val_fold = X_train_selected[train_idx], X_train_selected[val_idx]
+        y_train_fold, y_val_fold = y_train[train_idx], y_train[val_idx]
+        dtrain = xgb.DMatrix(X_train_fold, label=y_train_fold)
+        dval = xgb.DMatrix(X_val_fold, label=y_val_fold)
+        model = xgb.train(
+            params=params,
+            dtrain=dtrain,
+            num_boost_round=trial.suggest_int("n_estimators", 50, 300),
+            evals=[(dtrain, 'train'), (dval, 'eval')],
+            early_stopping_rounds=50,
+            verbose_eval=False
+        )
+        y_val_pred = model.predict(dval)
+        y_val_pred_binary = (y_val_pred >= 0.5).astype(int)
+        f1_scores.append(f1_score(y_val_fold, y_val_pred_binary))
+    return np.mean(f1_scores)
+
+# Main Program
+columns_to_drop = ["Sample ID", "study_id", "Alzheimers", "Date Sample", "age", "Dementia Other"] # "malnutrition_indicator_sco", "clinical_frailty_scale", "PPI", 
+
+train_data, test_data, feature_columns = preprocess_data(clinical_microbiome_df, columns_to_drop, test_size, seed)
+
+test_data = test_data.groupby('Alzheimers', group_keys=False).apply(
+    lambda x: x.sample(n=15, random_state=seed)
+).reset_index(drop=True)
+
+X_train = deepcopy(train_data[feature_columns].values)
+y_train = np.array(train_data["Alzheimers"].values)
+X_test = deepcopy(test_data[feature_columns].values)
+y_test = np.array(test_data["Alzheimers"].values)
+scale_pos_weight = compute_weights(y_train)
+
+# Run Optuna Optimization
+study = optuna.create_study(direction="maximize", sampler=TPESampler(seed=seed))
+study.optimize(lambda trial: objective(trial, X_train, y_train, scale_pos_weight, seed), n_trials=200)
+
+# Best Parameters
+best_params = study.best_params
+print("Best Parameters:", best_params)
+
+# Apply Final Model
+final_selector = SelectFromModel(
+    estimator=XGBClassifier(
+        objective='binary:logistic',
+        eval_metric='logloss',
+        random_state=seed,
+        tree_method=gpu_device,
+        device=device,
+        scale_pos_weight=scale_pos_weight,
+
+    ),
+    
+    threshold=-1e10 if best_params['threshold'] == 'very_low' else best_params['threshold'],
+    max_features=best_params['max_features'],
+    norm_order=best_params['norm_order']
+)
+
+final_selector.fit(X_train, y_train)
+X_train_selected = final_selector.transform(X_train)
+X_test_selected = final_selector.transform(X_test)
+
+# Train Final Model
+final_model_params = {
+    **{k: v for k, v in best_params.items() if k not in ['threshold', 'norm_order', 'max_features', 'n_estimators']},
+    'objective': 'binary:logistic',
+    'eval_metric': 'logloss',
+    'scale_pos_weight': scale_pos_weight,
+    'seed': seed,
+    'tree_method': gpu_device,
+    'device': device,
+
+}
+
+dtrain_final = xgb.DMatrix(X_train_selected, label=y_train)
+dtest_final = xgb.DMatrix(X_test_selected)
+
+final_model = xgb.train(
+    params=final_model_params,
+    dtrain=dtrain_final,
+    num_boost_round=best_params['n_estimators'],
+)
+
+# Predictions and Evaluation
+y_test_pred = final_model.predict(dtest_final)
+y_test_pred_binary = (y_test_pred >= 0.5).astype(int)
+auc = roc_auc_score(y_test, y_test_pred_binary)
+accuracy = accuracy_score(y_test, y_test_pred_binary)
+f1 = f1_score(y_test, y_test_pred_binary)
+conf_matrix = confusion_matrix(y_test, y_test_pred_binary)
+
+print("\nTest Metrics:")
+print(f"ROC AUC: {auc}\nAccuracy: {accuracy}\nF1 Score: {f1}\nConfusion Matrix:\n{conf_matrix}")
+disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix, display_labels=["Negative", "Positive"])
+disp.plot(cmap="Blues")
+plt.title("Confusion Matrix")
+plt.show()
+
+report = classification_report(y_test, y_test_pred_binary, target_names=["Negative", "Positive"])
+print("\nClassification Report:")
+print(report)
+
+# Extract feature names for selected features
+selected_feature_names = [feature_columns[i] for i in final_selector.get_support(indices=True)]
+print(f"Number of selected features: {len(selected_feature_names)}")
+
+# Step 1: Initialize SHAP explainer
+explainer = shap.Explainer(final_model, X_train_selected)
+
+# Step 2: Compute SHAP values
+shap_values = explainer(X_train_selected, check_additivity=False)
+
+# Ensure SHAP values are in the correct shape for processing
+print(f"Shape of SHAP values: {shap_values.values.shape}")  # Check the shape
+
+# Truncate each feature name to a maximum of 30 characters
+max_len = 1000
+selected_feature_names = [
+    feature[:max_len] if len(feature) > max_len else feature  # Truncate if longer than 30 characters
+    for feature in selected_feature_names
+]
+
+# Verify the selected feature names align with the SHAP values
+assert len(selected_feature_names) == X_train_selected.shape[1], "Mismatch in feature names and SHAP input dimensions."
+
+# Generate SHAP summary plot with corrected feature names
+plt.figure(figsize=(20, 10))  # Increased width for a wider plot
+plt.title("SHAP Violin Plot - Global Feature Importance", fontsize=14)
+
+# Create summary plot with corrected feature names
+shap.summary_plot(
+    shap_values.values,  # SHAP values
+    X_train_selected,  # Input data
+    feature_names=selected_feature_names,  # Correct feature names
+    max_display=20,  # Limit to top 20 features
+    plot_type="violin"  # Violin plot with colors
+)
+plt.show()
+
+bacteria_found = check_for_bacteria(bacteria_df.species_name.tolist(),selected_feature_names)
+
+
+# In[15]:
+
+
+roc_auc_score(y_test, y_test_pred_binary)
+
+
+# In[16]:
+
+
+pred_results = pd.DataFrame({
+    'Sample ID': test_data['Sample ID'],
+    'XGB True Label': y_test.astype(int),
+    'XGB Predicted Binary': y_test_pred_binary
+})
+
+pred_results
+
+
+# In[17]:
+
+
+auc
+
+
+# In[18]:
+
+
+# Calculate the ROC curve
+fpr, tpr, thresholds = roc_curve(y_test, y_test_pred_binary)
+
+# Plot the ROC curve
+plt.figure()
+plt.plot(fpr, tpr, label=f'ROC Curve (AUC = {auc:.2f})')
+plt.plot([0, 1], [0, 1], 'k--', label='Random Guess')  # Dashed diagonal line
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.legend(loc='lower right')
+plt.grid()
+plt.show()
+
+
+# In[19]:
+
+
+accuracy
+
+
+# In[20]:
+
+
+f1
+
+
+# In[21]:
+
+
+conf_matrix
+
+
+# In[22]:
+
+
+disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix, display_labels=["Negative", "Positive"])
+disp.plot(cmap="Blues")
+plt.title("Confusion Matrix")
+plt.show()
+
+
+# In[ ]:
+
+
+
+
+
+# In[23]:
+
+
+# Verify the selected feature names align with the SHAP values
+assert len(selected_feature_names) == X_train_selected.shape[1], "Mismatch in feature names and SHAP input dimensions."
+
+# Generate SHAP summary plot with corrected feature names
+plt.figure(figsize=(20, 10))  # Increased width for a wider plot
+plt.title("SHAP Violin Plot - Global Feature Importance", fontsize=14)
+
+# Create summary plot with corrected feature names
+shap.summary_plot(
+    shap_values.values,  # SHAP values
+    X_train_selected,  # Input data
+    feature_names=selected_feature_names,  # Correct feature names
+    max_display=20,  # Limit to top 20 features
+    plot_type="violin"  # Violin plot with colors
+)
+plt.show()
+
+bacteria_found = check_for_bacteria(bacteria_df.species_name.tolist(),selected_feature_names)
+
+
+# In[24]:
+
+
+# Compute directional SHAP statistics
+mean_shap = shap_values.values.mean(axis=0)  # Mean SHAP value (directional)
+mean_abs_shap = np.abs(shap_values.values).mean(axis=0)  # Mean absolute SHAP value (magnitude)
+std_shap = shap_values.values.std(axis=0)  # Standard deviation of SHAP values
+
+# Create a DataFrame summarizing the SHAP values
+directional_shap_df = pd.DataFrame({
+    "Feature": selected_feature_names,
+    "Mean_SHAP": mean_shap,         # Direction
+    "Mean_Abs_SHAP": mean_abs_shap, # Magnitude
+    "Std_SHAP": std_shap            # Variability
+})
+
+# Sort by the magnitude (Mean_Abs_SHAP) in descending order
+directional_shap_df = directional_shap_df.sort_values(by="Mean_Abs_SHAP", ascending=False).reset_index(drop=True)
+
+directional_shap_df.to_csv(f"output{os.sep}xgboost_experiment{experiment_number:02d}_shap_values.csv", index=False)
+
+
+# In[25]:
+
+
+# Ensure SHAP values are in the correct shape for processing
+print(f"Shape of SHAP values: {shap_values.values.shape}")  # Check the shape
+
+# Truncate each feature name to a maximum of 30 characters
+max_len = 1000
+selected_feature_names = [
+    feature[:max_len] if len(feature) > max_len else feature  # Truncate if longer than 30 characters
+    for feature in selected_feature_names
+]
+
+# Verify the selected feature names align with the SHAP values
+assert len(selected_feature_names) == X_train_selected.shape[1], "Mismatch in feature names and SHAP input dimensions."
+
+# Generate SHAP summary plot with corrected feature names
+plt.figure(figsize=(20, 10))  # Increased width for a wider plot
+plt.title("SHAP Bar Plot - Global Feature Importance", fontsize=14)
+
+# Create summary plot with corrected feature names
+shap.summary_plot(
+    shap_values.values,  # SHAP values
+    X_train_selected,  # Input data
+    feature_names=selected_feature_names,  # Correct feature names
+    max_display=20,  # Limit to top 20 features
+    plot_type="bar"  # Violin plot with colors
+)
+plt.show()
+
+bacteria_found = check_for_bacteria(bacteria_df.species_name.tolist(),selected_feature_names)
+
+
+# In[26]:
+
+
+measures = ["xgboost", seed, experiment_number, accuracy, auc, f1]
+
+# Create a DataFrame with appropriate column names
+columns = ["Model", "Seed", "Experiment_Number", "Accuracy", "AUC", "F1_Score"]
+measures_df = pd.DataFrame([measures], columns=columns)
+measures_df
+
+# 0	xgboost	315491657	1	0.820513	0.9125	0.78125
+# 0	xgboost	315491657	1	0.846154	0.886806	0.8125
+
+
+# In[27]:
+
+
+output_path = "output"
+measures_path = f"{output_path}{os.sep}xgboost_experiment{experiment_number:02d}_measures.csv"
+if output_path and not os.path.exists(output_path):
+    os.makedirs(output_path)
+measures_path
+
+
+# In[28]:
+
+
+measures_df.to_csv(measures_path, index=False)
+
+
+# In[29]:
+
+
+y_test_pred = final_model.predict(dtest_final)
+y_test_pred_binary = (y_test_pred >= 0.5).astype(int)
+
+# Initialize an empty list to store DataFrames for each observation
+all_records = []
+
+# Loop through all observations in the dataset
+for observation_idx in range(X_train_selected.shape[0]):
+    # Verify SHAP values are accessible
+    if hasattr(shap_values, "values"):  # For SHAP Explanation object
+        shap_values = shap_values.values
+
+    # Verify dimensions
+    assert shap_values.shape[1] == len(selected_feature_names), \
+        "Mismatch between SHAP values and feature names."
+
+    # Create a DataFrame for the current observation
+    observation_df = pd.DataFrame({
+        "Sample ID": [train_data["Sample ID"].iloc[observation_idx]] * len(selected_feature_names),
+        "Study ID": [train_data["study_id"].iloc[observation_idx]] * len(selected_feature_names),
+        "Feature Name": selected_feature_names,
+        "Feature Value": X_train_selected[observation_idx, :],
+        "SHAP Value": shap_values[observation_idx, :],
+        "Ground Truth": [y_train[observation_idx]] * len(selected_feature_names)
+    })
+
+    # Append the observation DataFrame to the list
+    all_records.append(observation_df)
+
+# Combine all observation DataFrames into a single DataFrame
+combined_force_plot_train_df = pd.concat(all_records, ignore_index=True)
+combined_force_plot_train_df
+
+
+# In[30]:
+
+
+combined_force_plot_train_df[combined_force_plot_train_df['Feature Name']=='Escherichia coli']
+
+
+# In[31]:
+
+
+train_data[train_data["Sample ID"]=='DC071'][["Escherichia coli"]]
+
+
+# In[32]:
+
+
+# Step 2: Compute SHAP values
+shap_values_test = explainer(X_test_selected, check_additivity=False)
+
+# Initialize an empty list to store DataFrames for each observation
+all_records = []
+
+# Loop through all observations in the dataset
+for observation_idx in range(X_test_selected.shape[0]):
+    # Verify SHAP values are accessible
+    if hasattr(shap_values_test, "values"):  # For SHAP Explanation object
+        shap_values_test = shap_values_test.values
+
+    # Verify dimensions
+    assert shap_values_test.shape[1] == len(selected_feature_names), \
+        "Mismatch between SHAP values and feature names."
+
+    # Create a DataFrame for the current observation
+    observation_df = pd.DataFrame({
+        "Sample ID": [test_data["Sample ID"].iloc[observation_idx]] * len(selected_feature_names),
+        "Study ID": [test_data["study_id"].iloc[observation_idx]] * len(selected_feature_names),
+        "Feature Name": selected_feature_names,
+        "Feature Value": X_test_selected[observation_idx, :],
+        "SHAP Value": shap_values_test[observation_idx, :],
+        "Predicted Percentage": [y_test_pred[observation_idx]] * len(selected_feature_names),
+        "Predicted Status": [y_test_pred_binary[observation_idx]] * len(selected_feature_names)
+    })
+
+    # Append the observation DataFrame to the list
+    all_records.append(observation_df)
+
+# Combine all observation DataFrames into a single DataFrame
+combined_force_plot_test_df = pd.concat(all_records, ignore_index=True)
+combined_force_plot_test_df
+
+
+# In[33]:
+
+
+combined_force_plot_test_df[combined_force_plot_test_df['Sample ID']=='FB246']
+
+
+# In[34]:
+
+
+len(selected_feature_names)
+
+
+# In[35]:
+
+
+# Compute directional SHAP statistics
+mean_shap = shap_values.mean(axis=0)  # Mean SHAP value (directional)
+mean_abs_shap = np.abs(shap_values).mean(axis=0)  # Mean absolute SHAP value (magnitude)
+std_shap = shap_values.std(axis=0)  # Standard deviation of SHAP values
+
+# Create a DataFrame summarizing the SHAP values
+directional_shap_df = pd.DataFrame({
+    "Feature": selected_feature_names,
+    "Mean_SHAP": mean_shap,         # Direction
+    "Mean_Abs_SHAP": mean_abs_shap, # Magnitude
+    "Std_SHAP": std_shap            # Variability
+})
+
+# Sort by the magnitude (Mean_Abs_SHAP) in descending order
+directional_shap_df = directional_shap_df.sort_values(by="Mean_Abs_SHAP", ascending=False).reset_index(drop=True)
+
+# Ensure the output directory exists
+output_dir = "output"
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+    
+directional_shap_df.to_csv(f"{output_dir}{os.sep}xgboost_experiment{experiment_number:02d}_shap_values.csv", index=False)
+directional_shap_df
+
+
+# In[36]:
+
+
+bacteria_list = [name.replace("_", " ") for name in list(bacteria_found)]
+len(bacteria_list), bacteria_list[:10]
+
+
+# In[37]:
+
+
+# Assign "bacterial variable" or "clinical variable"
+directional_shap_df["Variable_Type"] = directional_shap_df["Feature"].apply(
+    lambda x: "bacterial" if x in bacteria_list else "clinical"
+)
+
+directional_shap_df
+
+
+# In[38]:
+
+
+directional_important_shap_df = directional_shap_df[
+    directional_shap_df[['Mean_SHAP', 'Mean_Abs_SHAP', 'Std_SHAP']].sum(axis=1) != 0
+]
+directional_important_shap_df
+
+
+# In[39]:
+
+
+directional_important_shap_df_sort = directional_important_shap_df.sort_values(by="Mean_Abs_SHAP", ascending=False)
+directional_important_shap_df_sort.head(20)
+
+
+# In[40]:
+
+
+def preprocess_no_normal_data(df, columns_to_drop, test_size, seed):
+    # Split study IDs into train/test sets
+    study_labels = df.groupby("study_id")["Alzheimers"].max().reset_index()
+    train_ids, test_ids = train_test_split(
+        study_labels["study_id"],
+        test_size=test_size,
+        stratify=study_labels["Alzheimers"],
+        random_state=seed,
+    )
+    
+    train_data = df[df["study_id"].isin(train_ids)].copy()
+    test_data = df[df["study_id"].isin(test_ids)].copy()
+
+    # Check for overlaps
+    check_for_overlap(train_data, test_data)
+
+    return train_data, test_data, feature_columns
+
+train_data_no_normal, test_data_no_normal, feature_columns = preprocess_no_normal_data(clinical_microbiome_df, columns_to_drop, test_size, seed)
+
+
+# In[41]:
+
+
+from glob import glob
+import shap
+from sklearn.model_selection import train_test_split
+import numpy as np
+import os
+import shutil
+import re
+from lxml import etree
+from bs4 import BeautifulSoup
+from langchain.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+# from langchain.vectorstores.chroma import Chroma
+from langchain_chroma import Chroma
+from dataclasses import dataclass
+from langchain.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from openai import OpenAI
+from datetime import datetime
+import time
+import torch
+import numpy as np
+import random
+import ipynbname
+from tqdm import tqdm
+import pandas as pd
+import tiktoken
+
+os.environ['OPENAI_API_KEY'] = "sk-proj-tQi6bjiemwTkb4HL9aBVT3BlbkFJ8CXmkRGGXYI60a1VF8An"
+from scripts.embeddings_utils import (
+    get_embedding,
+    distances_from_embeddings
+)
+
+
+# In[42]:
+
+
+print(f"Experiment name: {EXPERIMENT_NAME}", f"| Initial seed: {initial_seed}")
+print(f"Seeds for Experiments: {random_integers_list}")
+
+
+# In[43]:
+
+
+clinical_microbiome_df
+
+
+# In[44]:
+
+
+glob("global_resources/*")
+
+
+# In[45]:
+
+
+clade_species_df = pd.read_csv(f'global_resources{os.sep}clade_species_df.csv')
+clade_species_df["species_name"] = clade_species_df["species_name"].str.replace("_", " ")
+
+clade_species_df.head()
+
+
+# In[46]:
+
+
+print(f"The {EXPERIMENT_NAME} Experiment{experiment_number:02d} seed: {seed}")
+
+
+# In[47]:
+
+
+# Function to set the seed for reproducibility
+def set_seed(seed_value=42):
+    """
+    Set seed for reproducibility.
+    """
+    print("Seed set:", seed_value)
+    torch.manual_seed(seed_value)  # Sets the seed for PyTorch
+    torch.cuda.manual_seed_all(seed_value)
+    torch.cuda.manual_seed(seed_value)
+    np.random.seed(seed_value)  # Sets the seed for NumPy
+    random.seed(seed_value)  # Sets the seed for Python's random module
+    os.environ['PYTHONHASHSEED'] = str(seed_value)  # Set Python hash seed
+    # Ensure that CuDNN uses deterministic algorithms
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+set_seed(seed)
+
+
+# In[48]:
+
+
+# Function to load documents
+def load_documents(data_path, search_keyword):
+    documents = []
+    for filename in os.listdir(data_path):
+        if filename.endswith(".xml"):
+            file_path = os.path.join(data_path, filename)
+            with open(file_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+                cleaned_content = clean_text(content)
+                documents.append(Document(page_content=cleaned_content, metadata={"source": filename, "keyword": search_keyword}))
+    return documents
+
+# Function to clean and normalize text
+def clean_text(text):
+    # Parse the XML
+    parser = etree.XMLParser(recover=True)
+    tree = etree.fromstring(text, parser=parser)
+    
+    # Extract text content
+    raw_text = etree.tostring(tree, encoding='unicode', method='text')
+
+    # Clean and normalize text
+    soup = BeautifulSoup(raw_text, "html.parser")
+    text = soup.get_text(separator=" ")
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = text.lower()  # Normalize text to lowercase
+
+    return text
+
+def split_text(documents, chunk_size=2000):
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=int(chunk_size),
+        chunk_overlap=int(chunk_size * 0.2),
+        length_function=len,
+        add_start_index=True,
+    )
+    chunks = text_splitter.split_documents(documents)
+    print(f"Split {len(documents)} documents into {len(chunks)} chunks.")
+    
+    # Add unique ID to each chunk
+    for chunk in chunks:
+        metadata = chunk.metadata
+        unique_id = f"{metadata['source']}.{metadata['start_index']}"
+        metadata['id'] = unique_id
+    
+    return chunks
+
+embeddings = OpenAIEmbeddings(model = 'text-embedding-ada-002',)
+
+
+# In[49]:
+
+
+publication_path = glob(f"..{os.sep}*data{os.sep}*publications*")[0]
+publication_path
+
+
+# In[50]:
+
+
+from glob import glob
+# Dictionary to store the count of files in each folder
+file_counts = {}
+
+for folder in glob(f"{publication_path}{os.sep}*"):
+    # Use glob to get the list of files in each folder
+    files = glob(os.path.join(folder, '*'))
+    # Store the count of files
+    file_counts[folder] = len(files)
+
+# Print the count of files for each folder
+for folder, count in file_counts.items():
+    print(f'{folder}: {count} files')
+
+
+# In[51]:
+
+
+publication_list =  glob(f"..{os.sep}*data{os.sep}*publications*{os.sep}*")
+publication_df = pd.DataFrame(publication_list, columns=['Publications'])
+publication_df = publication_df['Publications'].str.split(os.sep, expand=True)
+publication_df = publication_df.iloc[:, 2:]
+publication_df.columns = ['SEARCH_TYPE', 'SEARCH_KEYWORD']
+publication_df
+
+
+# In[52]:
+
+
+knowledge_paths = glob(f"..{os.sep}knowledge*{os.sep}knowledge_base*")
+knowledge_paths
+
+
+# In[53]:
+
+
+# Store them in a dictionary for easy reference
+knowledge_db_dict = {f"knowledge_db{i+1}": db for i, db in enumerate(knowledge_paths)}
+
+# Display the loaded databases
+for key, value in knowledge_db_dict.items():
+    print(f"{key}: {value}")
+
+
+# In[54]:
+
+
+SEARCH_TYPE = "publications"
+CHROMA_PATH = glob(f"..{os.sep}*knowledge_base")[0]
+CHROMA_PATH
+
+
+# In[55]:
+
+
+import requests
+import json
+ 
+def query_vector_db(query_text, top_k=5, similarity_threshold=0.75):
+    """
+    Query the vector database service.
+    """
+    try:
+        response = requests.post(
+            f"{SERVER_URL}/query",
+            json={
+                "query": query_text,
+                "top_k": top_k,
+                "similarity_threshold": similarity_threshold
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"Error querying vector DB: {str(e)}")
+        return None
+ 
+def rag_model(test_query, top_k, similarity):
+    """
+    Queries the vector database and extracts Source and Content as a JSON object.
+
+    Args:
+        test_query (str): The query string to search in the vector database.
+        top_k (int): Number of top results to retrieve.
+        similarity_threshold (float): Minimum similarity score threshold for the results.
+
+    Returns:
+        str: JSON-formatted string containing Source and Content.
+    """
+
+    # Query the vector database
+    results = query_vector_db(
+        query_text=test_query,
+        top_k=top_k,
+        similarity_threshold=similarity
+    )
+
+    # Regular expression to match Source and Content
+    rag_pattern = r"Source: (.+?)\nContent: (.+?)(?:\nRelevance Score:|\n---|$)"
+
+    # Find all matches
+    rag_matches = re.findall(rag_pattern, results['context'], re.DOTALL)
+
+    # Convert matches into a list of dictionaries
+    rag_data = [{"Source": source.strip(), "Content": content.strip()} for source, content in rag_matches]
+
+    # Convert the list of dictionaries to JSON
+    rag_json = json.dumps(rag_data, indent=4)
+
+    return rag_json
+
+
+# In[56]:
+
+
+# Define URLs
+win_url = "http://127.0.0.1:5000"
+ubuntu_url = "http://146.189.163.52:5000"
+
+# Check operating system
+if platform.system() == "Windows":
+    SERVER_URL = win_url
+else:
+    SERVER_URL = ubuntu_url
+
+print(f"SERVER_URL set to: {SERVER_URL}")
+
+# Define the query
+query_text = (
+    "taxonomy_hierarchy is 'k__Bacteria|p__Firmicutes|c__Clostridia|o__Clostridiales|f__Lachnospiraceae|g__Lachnospiraceae_unclassified|s__Lachnospiraceae_bacterium_10_1'. "
+    "and species_name is 'Lachnospiraceae_bacterium_10_1' found in gut microbiome, "
+    "define the description and group of this species in the context of alzheimer's disease at species level. "
+)
+
+# Start timing
+start_time = time.perf_counter()
+
+# Execute the RAG model
+rag_output = rag_model(query_text, top_k=5, similarity=0.8)
+
+# End timing
+end_time = time.perf_counter()
+
+# Calculate and print execution time
+execution_time = end_time - start_time
+print(f"Execution Time: {execution_time:.2f} seconds")
+
+# Display RAG output
+print("\nRAG Output:\n")
+print(rag_output)
+
+
+# In[57]:
+
+
+clinical_microbiome_df
+
+
+# In[58]:
+
+
+glob("global_resources/*")
+
+
+# In[59]:
+
+
+clade_species_df = pd.read_csv(f'global_resources{os.sep}clade_species_df.csv')
+clade_species_df["species_name"] = clade_species_df["species_name"].str.replace("_", " ")
+
+clade_species_df.head()
+
+
+# In[60]:
+
+
+print(f"The {EXPERIMENT_NAME} Experiment{experiment_number:02d} seed: {seed}")
+
+
+# In[61]:
+
+
+SEARCH_TYPE, CHROMA_PATH
+
+
+# In[62]:
+
+
+# Function to set the seed for reproducibility
+def set_seed(seed_value=42):
+    """
+    Set seed for reproducibility.
+    """
+    print("Seed set:", seed_value)
+    torch.manual_seed(seed_value)  # Sets the seed for PyTorch
+    torch.cuda.manual_seed_all(seed_value)
+    torch.cuda.manual_seed(seed_value)
+    np.random.seed(seed_value)  # Sets the seed for NumPy
+    random.seed(seed_value)  # Sets the seed for Python's random module
+    os.environ['PYTHONHASHSEED'] = str(seed_value)  # Set Python hash seed
+    # Ensure that CuDNN uses deterministic algorithms
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+set_seed(seed)
+
+
+# In[63]:
+
+
+embeddings = OpenAIEmbeddings(model = 'text-embedding-ada-002',)
+
+
+# In[64]:
+
+
+publication_path
+
+
+# In[65]:
+
+
+publication_df
+
+
+# In[66]:
+
+
+knowledge_paths
+
+
+# In[67]:
+
+
+len(clinical_microbiome_df['study_id'].unique()), len(train_data_no_normal['study_id'].unique()), len(test_data_no_normal['study_id'].unique())
+
+
+# In[68]:
+
+
+clinical_microbiome_tr = train_data
+print(clinical_microbiome_tr['Alzheimers'].value_counts())
+print(clinical_microbiome_tr['Alzheimers'].value_counts(normalize=True))
+clinical_microbiome_tr.head()
+
+
+# In[69]:
+
+
+clinical_microbiome_tt = test_data
+print(clinical_microbiome_tt['Alzheimers'].value_counts())
+print(clinical_microbiome_tt['Alzheimers'].value_counts(normalize=True))
+clinical_microbiome_tt.head()
+
+
+# In[70]:
+
+
+len_tr, len_tt = len(clinical_microbiome_tr), len(clinical_microbiome_tt)
+len_total = len_tr+len_tt
+round(len_tr/len_total, 2), round(len_tt/len_total, 2), len_tr, len_tt
+
+
+# In[71]:
+
+
+# Check for uniqueness of existence
+tr_in_tt_unique = clinical_microbiome_tr['Sample ID'].isin(clinical_microbiome_tt['Sample ID']).unique().tolist()
+tt_in_tr_unique = clinical_microbiome_tt['Sample ID'].isin(clinical_microbiome_tr['Sample ID']).unique().tolist()
+
+tr_in_tt_unique, tt_in_tr_unique
+
+
+# In[72]:
+
+
+# Check for uniqueness of existence
+tr_in_tt_unique = clinical_microbiome_tr['study_id'].isin(clinical_microbiome_tt['study_id']).unique().tolist()
+tt_in_tr_unique = clinical_microbiome_tt['study_id'].isin(clinical_microbiome_tr['study_id']).unique().tolist()
+
+tr_in_tt_unique, tt_in_tr_unique
+
+
+# In[73]:
+
+
+clinical_data_dictionary = pd.read_csv(f"..{os.sep}data{os.sep}clinical_variable_explanations_df.csv")
+clinical_data_dictionary
+
+
+# In[74]:
+
+
+train_sample_ids = train_data['Sample ID'].tolist()
+test_sample_ids = test_data['Sample ID'].tolist()
+
+
+# In[75]:
+
+
+train_study_ids = set(train_data['study_id'].tolist())
+test_study_ids = set(test_data['study_id'].tolist())
+
+
+# In[76]:
+
+
+filtered_mph_matching_df = pd.read_csv(f"global_resources{os.sep}mph_matching_ad.csv")
+print(filtered_mph_matching_df.shape)
+filtered_mph_matching_df
+
+
+# In[77]:
+
+
+filtered_mph_matching_df_t = filtered_mph_matching_df.set_index("species_name").T.reset_index()
+filtered_mph_matching_df_t = filtered_mph_matching_df_t.rename(columns={'index': 'sample_ids'})
+filtered_mph_matching_df_t = filtered_mph_matching_df_t.set_index('sample_ids')
+
+filtered_mph_matching_df_t
+# filtered_mph_matching_df_t.reset_index()
+
+
+# In[78]:
+
+
+matching_index = filtered_mph_matching_df_t.index
+# Filter rows in filtered_mph_matching_df_t based on Sample IDs in clinical_microbiome_df
+filtered_mph_matching_df_t = filtered_mph_matching_df_t[
+    filtered_mph_matching_df_t.index.isin(clinical_microbiome_df["Sample ID"])
+]
+
+# Display the new filtered DataFrame
+filtered_mph_matching_df_t
+
+
+# In[79]:
+
+
+from skbio.diversity import alpha_diversity
+from skbio.diversity import beta_diversity # Import beta_diversity directly
+
+def calculate_and_save_alpha_diversity(df, sample_ids, metric='shannon', output_filename=None):
+    """
+    Calculate alpha diversity for the given DataFrame and sample IDs, and save the results to a file.
+    
+    Parameters:
+        df (pd.DataFrame): Input DataFrame with microbial data.
+        sample_ids (list): List of sample IDs to filter.
+        metric (str): Diversity metric to use (default is 'shannon').
+        output_filename (str): Path to save the results (default is None, which skips saving).
+        
+    Returns:
+        pd.DataFrame: Alpha diversity results with 'Sample ID' and metric value.
+    """
+    filtered_df = df[df.index.isin(sample_ids)]
+    print(f"Filtered DataFrame Shape: {filtered_df.shape}")
+    diversity = alpha_diversity(metric, filtered_df.values, ids=filtered_df.index)
+    diversity_df = pd.DataFrame(diversity, index=filtered_df.index).reset_index()
+    diversity_df.columns = ['Sample ID', f"Alpha Diversity ({metric.capitalize()} Index)"]
+    
+    # Save to file if a filename is provided
+    if output_filename:
+        # Create directory path if it doesn't exist
+        directory = os.path.dirname(output_filename)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory)
+            print(f"Created directory: {directory}")
+            
+        diversity_df.to_csv(output_filename, index=False)
+        print(f"Alpha Diversity results saved to {output_filename}")
+    
+    return diversity_df
+
+# Calculate Alpha Diversity for different datasets and save results
+# Full dataset
+ad_df = calculate_and_save_alpha_diversity(
+    filtered_mph_matching_df_t,
+    filtered_mph_matching_df_t.index.tolist(),
+    output_filename=f"global_resources{os.sep}ad_df.csv"
+)
+
+# Train dataset
+ad_df_tr = calculate_and_save_alpha_diversity(
+    filtered_mph_matching_df_t,
+    train_sample_ids,
+    output_filename=f"local_resources{os.sep}experiment{experiment_number:02}{os.sep}biostatistics{os.sep}ad_df_tr.csv"
+)
+# print("\nAlpha Diversity (Shannon Index) for Train Dataset:")
+# print(ad_df_tr)
+
+# Test dataset
+ad_df_tt = calculate_and_save_alpha_diversity(
+    filtered_mph_matching_df_t,
+    test_sample_ids,
+    output_filename=f"local_resources{os.sep}experiment{experiment_number:02}{os.sep}biostatistics{os.sep}ad_df_tt.csv"
+)
+# print("\nAlpha Diversity (Shannon Index) for Test Dataset:")
+# print(ad_df_tt)
+
+print("\nAlpha Diversity (Shannon Index) for Full Dataset:")
+ad_df
+
+
+# In[80]:
+
+
+# Train dataset
+measure_list= ['shannon', 'simpson', 'berger_parker_d']
+# Loop through metrics and calculate alpha diversity
+all_alpha_div_results = []
+for ad_measure in measure_list:
+    # Use your calculate_and_save_alpha_diversity function
+    ad_temp = calculate_and_save_alpha_diversity(
+        filtered_mph_matching_df_t,  # Replace with your DataFrame variable
+        filtered_mph_matching_df_t.index.tolist(),  # Replace with your sample IDs
+        metric=ad_measure
+    )
+    
+    # Append the results to the list
+    all_alpha_div_results.append(ad_temp)
+    
+    # Print the results for the current metric
+    # print(f"\nAlpha Diversity ({ad_measure} Index) for Full Dataset:")
+    # print(ad_temp)
+
+# Combine results into a single DataFrame
+combined_alpha_div_df = pd.concat(all_alpha_div_results, axis=1)
+
+# Display combined results
+print("\nCombined Alpha Diversity Metrics:")
+combined_alpha_div_df = combined_alpha_div_df.loc[:, ~combined_alpha_div_df.columns.duplicated()]
+combined_alpha_div_df
+
+
+# In[81]:
+
+
+all_alpha_div_results[1]
+
+
+# In[82]:
+
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+# Create a violin plot
+plt.figure(figsize=(8, 6))
+sns.violinplot(y="Alpha Diversity (Shannon Index)", data=ad_df)
+plt.title('Violin: Distribution of Alpha Diversity (Shannon Index)', fontsize=14)
+plt.ylabel('Shannon Index', fontsize=12)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(8, 6))
+sns.violinplot(y="Alpha Diversity (Shannon Index)", data=ad_df)
+plt.title('Violin: Distribution of Alpha Diversity (Shannon Index)', fontsize=14)
+plt.ylabel('Shannon Index', fontsize=12)
+plt.tight_layout()
+
+# Save the plot to a file
+output_path = f'global_resources{os.sep}alpha_diversity_violin_plot.png'
+plt.savefig(output_path, dpi=300)
+plt.close()
+
+output_path
+
+
+# In[83]:
+
+
+# Histogram of Shannon Index (Alpha Diversity)
+plt.figure(figsize=(8, 6))
+sns.histplot(ad_df["Alpha Diversity (Shannon Index)"], bins=30, kde=True, color='blue')
+plt.title("KDE: Distribution of Alpha Diversity (Shannon Index)", fontsize=14)
+plt.xlabel("Shannon Index", fontsize=12)
+plt.ylabel("Frequency", fontsize=12)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(8, 6))
+sns.histplot(ad_df["Alpha Diversity (Shannon Index)"], bins=30, kde=True, color='blue')
+plt.title("KDE: Distribution of Alpha Diversity (Shannon Index)", fontsize=14)
+plt.xlabel("Shannon Index", fontsize=12)
+plt.ylabel("Frequency", fontsize=12)
+plt.tight_layout()
+
+# Save the plot to a file
+output_hist_path = f'global_resources{os.sep}alpha_diversity_histogram.png'
+plt.savefig(output_hist_path, dpi=300)
+plt.close()
+
+output_hist_path
+
+
+# In[84]:
+
+
+# Histogram of Shannon Index (Alpha Diversity)
+plt.figure(figsize=(8, 6))
+sns.histplot(ad_df["Alpha Diversity (Shannon Index)"], bins=30, kde=True, color='blue')
+plt.title("KDE: Distribution of Alpha Diversity (Shannon Index)", fontsize=14)
+plt.xlabel("Shannon Index", fontsize=12)
+plt.ylabel("Frequency", fontsize=12)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(8, 6))
+sns.histplot(ad_df["Alpha Diversity (Shannon Index)"], bins=30, kde=True, color='blue')
+plt.title("KDE: Distribution of Alpha Diversity (Shannon Index)", fontsize=14)
+plt.xlabel("Shannon Index", fontsize=12)
+plt.ylabel("Frequency", fontsize=12)
+plt.tight_layout()
+
+# Save the plot to a file
+output_hist_path = f'global_resources{os.sep}alpha_diversity_histogram.png'
+plt.savefig(output_hist_path, dpi=300)
+plt.close()
+
+output_hist_path
+
+
+# In[85]:
+
+
+from skbio.diversity import beta_diversity
+
+def calculate_and_save_beta_diversity(df, sample_ids, method="braycurtis", output_filename=None):
+    """
+    Calculate beta diversity for a subset of samples and save the results to a file if specified.
+    
+    Parameters:
+        df (pd.DataFrame): Input DataFrame with microbial data.
+        sample_ids (list): List of sample IDs to filter.
+        method (str): Beta diversity metric to use (default is 'braycurtis').
+        output_filename (str): Path to save the beta diversity DataFrame (default is None, which skips saving).
+        
+    Returns:
+        pd.DataFrame: Beta diversity DataFrame (square distance matrix).
+    """
+    # Filter the DataFrame based on sample IDs
+    filtered_df = df[df.index.isin(sample_ids)]
+    print(f"Filtered DataFrame Shape: {filtered_df.shape}")
+    
+    # Calculate beta diversity
+    sample_id = filtered_df.index
+    bc_dm = beta_diversity(method, filtered_df.values, ids=sample_id)
+    bc_df = pd.DataFrame(bc_dm.data, index=bc_dm.ids, columns=bc_dm.ids)
+    
+    # Save to CSV if a filename is provided
+    if output_filename:
+        bc_df.to_csv(output_filename, index=False)
+        print(f"Beta Diversity results saved to {output_filename}")
+    
+    return bc_df
+
+# Full dataset
+bc_df = calculate_and_save_beta_diversity(
+    filtered_mph_matching_df_t,
+    filtered_mph_matching_df_t.index.tolist(),
+    output_filename=f"global_resources{os.sep}bc_df.csv"
+)
+print("\nBeta Diversity (Bray-Curtis Dissimilarity) for Full Dataset:")
+print(bc_df)
+
+# Train dataset
+bc_df_tr = calculate_and_save_beta_diversity(
+    filtered_mph_matching_df_t,
+    train_sample_ids,
+    output_filename=f"local_resources{os.sep}experiment{experiment_number:02}{os.sep}biostatistics{os.sep}bc_df_tr.csv"
+)
+print("\nBeta Diversity (Bray-Curtis Dissimilarity) for Train Dataset:")
+print(bc_df_tr)
+
+# Test dataset
+bc_df_tt = calculate_and_save_beta_diversity(
+    filtered_mph_matching_df_t,
+    test_sample_ids,
+    output_filename=f"local_resources{os.sep}experiment{experiment_number:02}{os.sep}biostatistics{os.sep}bc_df_tt.csv"
+)
+print("\nBeta Diversity (Bray-Curtis Dissimilarity) for Test Dataset:")
+print(bc_df_tt)
+
+
+# In[86]:
+
+
+from skbio.diversity import beta_diversity
+import pandas as pd
+
+# Define beta diversity metrics to calculate
+beta_measure_list = ["braycurtis", "jaccard", "canberra"]
+
+# Initialize an empty list to store results
+all_beta_div_results = []
+
+# Loop through metrics and calculate beta diversity
+for beta_measure in beta_measure_list:
+    # Calculate beta diversity for the current metric
+    beta_matrix = beta_diversity(
+        metric=beta_measure,
+        counts=filtered_mph_matching_df_t.values,
+        ids=filtered_mph_matching_df_t.index.tolist(),
+    )
+    
+    # Convert the distance matrix to a DataFrame
+    beta_df = beta_matrix.to_data_frame()
+    
+    # Rename columns to include the metric name
+    beta_df.columns = [f"{beta_measure}_{col}" for col in beta_df.columns]
+    
+    # Append the result to the list
+    all_beta_div_results.append(beta_df)
+
+# Combine all results into a single DataFrame
+combined_beta_div_df = pd.concat(all_beta_div_results, axis=1)
+
+# Remove duplicate columns if necessary
+combined_beta_div_df = combined_beta_div_df.loc[:, ~combined_beta_div_df.columns.duplicated()]
+
+# Display combined results
+print("\nCombined Beta Diversity Metrics:")
+combined_beta_div_df
+
+
+# In[87]:
+
+
+# Splitting bc_df into hc (healthy control) and ad (Alzheimer's patients) DataFrames
+# hc_ids, ad_ids
+hc_ids = clinical_microbiome_df[clinical_microbiome_df['Alzheimers'] == 0.0]['Sample ID']
+ad_ids = clinical_microbiome_df[clinical_microbiome_df['Alzheimers'] == 1.0]['Sample ID']
+
+# Creating bc_df_hc and bc_df_ad using the sample IDs from filtered_training_clinical_df
+bc_df_hc = bc_df.loc[bc_df.index.intersection(hc_ids), bc_df.columns.intersection(hc_ids)]
+bc_df_ad = bc_df.loc[bc_df.index.intersection(ad_ids), bc_df.columns.intersection(ad_ids)]
+
+# Display the resulting DataFrames
+bc_df_hc.head()
+
+
+# In[88]:
+
+
+# hc_ids ad_ids
+combined_alpha_div_df_hc = combined_alpha_div_df[combined_alpha_div_df["Sample ID"].isin(hc_ids)]
+combined_alpha_div_df_ad = combined_alpha_div_df[~combined_alpha_div_df["Sample ID"].isin(hc_ids)]
+
+combined_alpha_div_df_hc.shape, combined_alpha_div_df_ad.shape
+combined_alpha_div_df_hc
+
+
+# In[89]:
+
+
+# hc_ids ad_ids
+# combined_alpha_div_df_hc = combined_alpha_div_df[combined_alpha_div_df["Sample ID"].isin(hc_ids)]
+# combined_alpha_div_df_ad = combined_alpha_div_df[~combined_alpha_div_df["Sample ID"].isin(hc_ids)]
+
+# combined_alpha_div_df_hc.shape, combined_alpha_div_df_ad.shape
+
+combined_beta_div_df_hc = combined_beta_div_df[combined_beta_div_df.index.isin(hc_ids)]
+combined_beta_div_df_ad = combined_beta_div_df[~combined_beta_div_df.index.isin(hc_ids)]
+combined_beta_div_df_hc.shape, combined_beta_div_df_ad.shape
+combined_beta_div_df_hc
+
+
+# In[90]:
+
+
+# Create a heatmap for the Bray-Curtis Dissimilarity matrix
+plt.figure(figsize=(12, 10))
+sns.heatmap(bc_df, cmap='viridis', xticklabels=False, yticklabels=False, cbar_kws={'label': 'Bray-Curtis Dissimilarity'})
+plt.title("Beta Diversity (Bray-Curtis Dissimilarity Heatmap)", fontsize=14)
+plt.xlabel("Samples", fontsize=12)
+plt.ylabel("Samples", fontsize=12)
+plt.tight_layout()
+plt.show()
+
+# Save the Bray-Curtis Dissimilarity Heatmap as an image file
+plt.figure(figsize=(12, 10))
+sns.heatmap(bc_df, cmap='viridis', xticklabels=False, yticklabels=False, cbar_kws={'label': 'Bray-Curtis Dissimilarity'})
+plt.title("Beta Diversity (Bray-Curtis Dissimilarity Heatmap)", fontsize=14)
+plt.xlabel("Samples", fontsize=12)
+plt.ylabel("Samples", fontsize=12)
+plt.tight_layout()
+
+# Save the plot to a file
+output_path = f'global_resources{os.sep}beta_diversity_heatmap.png'
+plt.savefig(output_path, dpi=300)
+plt.close()
+
+output_path
+
+
+# In[91]:
+
+
+# Calculate aggregate scores (e.g., mean) for each sample
+sample_scores = bc_df.mean(axis=1)  # Replace `.mean()` with `.sum()` or `.max()` if desired
+
+# Select the top 30 samples by value
+top_30_samples = sample_scores.nlargest(30).index
+
+# Subset the matrix to include only the top 30 rows and columns
+top_30_matrix = bc_df.loc[top_30_samples, top_30_samples]
+
+# Create the heatmap for the top 30 samples
+plt.figure(figsize=(14, 12))
+sns.heatmap(
+    top_30_matrix,
+    cmap='viridis',
+    xticklabels=True,
+    yticklabels=True,
+    cbar_kws={'label': 'Bray-Curtis Dissimilarity'}
+)
+plt.title("Top 30 Samples by Value: Beta Diversity (Bray-Curtis Dissimilarity Heatmap)", fontsize=14)
+plt.xlabel("Samples", fontsize=12)
+plt.ylabel("Samples", fontsize=12)
+plt.tight_layout()
+plt.show()
+
+# Save the heatmap to a file
+output_path = f'global_resources{os.sep}top_30_beta_diversity_heatmap.png'
+plt.savefig(output_path, dpi=300)
+plt.close()
+
+print(f"Heatmap saved to: {output_path}")
+
+
+# In[92]:
+
+
+from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.spatial.distance import squareform
+import matplotlib.pyplot as plt
+
+# Convert the square distance matrix to condensed format
+condensed_dm = squareform(bc_df.values)
+
+# Perform hierarchical clustering
+linkage_matrix = linkage(condensed_dm, method='average')
+
+# Plot the dendrogram with truncated labels
+plt.figure(figsize=(12, 8))
+dendrogram(
+    linkage_matrix,
+    truncate_mode='level',  # Show only top-level clusters
+    p=10,                   # Number of levels to show
+    leaf_rotation=90,
+    leaf_font_size=10,
+    show_contracted=True    # Indicate where clusters are truncated
+)
+plt.title("Hierarchical Clustering (Bray-Curtis)", fontsize=14)
+plt.xlabel("Clusters", fontsize=12)
+plt.ylabel("Distance", fontsize=12)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(12, 8))
+dendrogram(
+    linkage_matrix,
+    truncate_mode='level',  # Show only top-level clusters
+    p=10,                   # Number of levels to show
+    leaf_rotation=90,
+    leaf_font_size=10,
+    show_contracted=True    # Indicate where clusters are truncated
+)
+plt.title("Hierarchical Clustering (Bray-Curtis)", fontsize=14)
+plt.xlabel("Clusters", fontsize=12)
+plt.ylabel("Distance", fontsize=12)
+plt.tight_layout()
+
+# Save the plot to a file
+output_path = f'global_resources{os.sep}beta_diversity_hierarchical_clustering_dendrogram.png'
+plt.savefig(output_path, dpi=300)
+plt.close()
+
+output_path
+
+
+# In[93]:
+
+
+print(clinical_microbiome_tr.shape, clinical_microbiome_tr['Alzheimers'].value_counts())
+clinical_microbiome_tr.head()
+
+
+# In[94]:
+
+
+# Splitting bc_df into hc (healthy control) and ad (Alzheimer's patients) DataFrames
+hc_ids_tr = clinical_microbiome_tr[clinical_microbiome_tr['Alzheimers'] == 0.0]['Sample ID']
+ad_ids_tr = clinical_microbiome_tr[clinical_microbiome_tr['Alzheimers'] == 1.0]['Sample ID']
+
+# Creating bc_df_hc and bc_df_ad using the sample IDs from filtered_training_clinical_df
+bc_df_hc_tr = bc_df_tr.loc[bc_df_tr.index.intersection(hc_ids_tr), bc_df_tr.columns.intersection(hc_ids_tr)]
+bc_df_ad_tr = bc_df_tr.loc[bc_df_tr.index.intersection(ad_ids_tr), bc_df_tr.columns.intersection(ad_ids_tr)]
+
+# Display the resulting DataFrames
+bc_df_hc_tr.head()
+
+
+# In[95]:
+
+
+# Splitting bc_df into hc (healthy control) and ad (Alzheimer's patients) DataFrames
+hc_ids_tt = clinical_microbiome_tt[clinical_microbiome_tt['Alzheimers'] == 0.0]['Sample ID']
+ad_ids_tt = clinical_microbiome_tt[clinical_microbiome_tt['Alzheimers'] == 1.0]['Sample ID']
+
+# Creating bc_df_hc and bc_df_ad using the sample IDs from filtered_training_clinical_df
+bc_df_hc_tt = bc_df_tt.loc[bc_df_tt.index.intersection(hc_ids_tt), bc_df_tt.columns.intersection(hc_ids_tt)]
+bc_df_ad_tt = bc_df_tt.loc[bc_df_tt.index.intersection(ad_ids_tt), bc_df_tt.columns.intersection(ad_ids_tt)]
+
+# Display the resulting DataFrames
+bc_df_hc_tt.head()
+
+
+# In[96]:
+
+
+bacteria_df
+
+
+# In[97]:
+
+
+def normalize_text(text):
+    """Converts text to lowercase, retains periods, removes other punctuation, and normalizes spaces."""
+    import re
+    text = text.lower()
+    # Remove punctuation except periods
+    text = re.sub(r'[^\w\s.]', '', text)  # Retain periods
+    return ' '.join(text.split())
+# Print the top 1 record
+print(normalize_text(bacteria_df['species_description'].iloc[0])) # Retrieve the first record
+print("-----------")
+
+# Print the top 2 record
+print(normalize_text(bacteria_df['species_description'].iloc[1])) # Retrieve the second record
+print("-----------")
+
+# Print the top 2 record
+print(normalize_text(bacteria_df['species_description'].iloc[800]))  # Retrieve the second record
+print("-----------")
+
+# Print the top 1 record
+print(normalize_text(bacteria_df['species_description'].iloc[900]))  # Retrieve the first record
+print("-----------")
+
+# Print the top 1 record
+print(normalize_text(bacteria_df['species_description'].iloc[912]))  # Retrieve the first record
+print("-----------")
+
+# Print the top 2 record
+print(normalize_text(bacteria_df['species_description'].iloc[924]))  # Retrieve the second record
+
+
+# In[98]:
+
+
+len(filtered_mph_matching_df_t.columns.tolist())
+
+
+# In[99]:
+
+
+data_dictionary=pd.read_csv(f"..{os.sep}data{os.sep}column_names.csv")
+data_dictionary
+
+
+# In[100]:
+
+
+clinical_dict_df = pd.read_excel(glob(f"..{os.sep}data{os.sep}*clinical_data_dictionary.xlsx")[0])
+clinical_dict_df
+
+
+# In[101]:
+
+
+# Test the function
+test_query = "what is alzheimer's disease"
+
+results = query_vector_db(
+    query_text=test_query,
+    top_k=5,
+    similarity_threshold=0.75
+)
+ 
+if results:
+    print(f"\nMessage: {results.get('message')}")
+    print("\nFull Context:")
+    print(results.get('context', ''))
+
+
+# In[102]:
+
+
+clinical_dict_df[clinical_dict_df['Feature Name'].isin(selected_feature_names)]
+
+
+# In[103]:
+
+
+selected_bacteria_explanation_df = bacteria_df[bacteria_df['species_name'].isin(selected_feature_names)]
+selected_bacteria_explanation_df
+
+
+# In[104]:
+
+
+# clinical_variable_explanations_df.to_csv(f"..{os.sep}data{os.sep}clinical_variable_explanations_df.csv", index=False)
+clinical_variable_explanations_df = pd.read_csv(f"..{os.sep}data{os.sep}clinical_variable_explanations_df.csv")
+clinical_variable_explanations_df
+
+
+# In[105]:
+
+
+selected_clinical_explanation_df = clinical_variable_explanations_df[clinical_variable_explanations_df['Feature Name'].isin(selected_feature_names)]
+selected_clinical_explanation_df
+
+
+# In[106]:
+
+
+print(clinical_variable_explanations_df["Feature Explanation"][clinical_variable_explanations_df['Feature Name']=='malnutrition_indicator_sco'].values[0])
+
+
+# In[107]:
+
+
+combined_force_plot_test_df
+
+
+# In[108]:
+
+
+# Fix column selection to avoid duplicates
+ml_prediction = combined_force_plot_test_df[['Sample ID', 'Study ID', 'Predicted Percentage', 'Predicted Status']].drop_duplicates()
+
+# Map Predicted Status values
+ml_prediction['Predicted Status'] = ml_prediction['Predicted Status'].map({0: 'No', 1: 'Yes'})
+
+# Reset index for clean DataFrame
+ml_prediction.reset_index(drop=True, inplace=True)
+
+# Filter rows where Sample ID is 'FB411'
+ml_prediction.head()
+
+
+# In[109]:
+
+
+ml_prediction[ml_prediction['Sample ID']=='FB246']
+
+
+# In[110]:
+
+
+combined_force_plot_test_df['Absolute SHAP Value'] = abs(combined_force_plot_test_df['SHAP Value'])
+
+# Sorting the DataFrame
+combined_force_plot_test_d_sorted = combined_force_plot_test_df.sort_values(
+    by=['Study ID', 'Sample ID', 'Absolute SHAP Value'],
+    ascending=[True, True, False]
+)
+combined_force_plot_test_d_sorted
+
+
+# In[111]:
+
+
+combined_force_plot_test_d_sorted_no_zero = combined_force_plot_test_d_sorted[
+    # (combined_force_plot_test_d_sorted["Sample ID"] == 'DC045') & 
+    (combined_force_plot_test_d_sorted["Absolute SHAP Value"] > 0)
+]
+combined_force_plot_test_d_sorted_no_zero
+
+
+# In[112]:
+
+
+# Create a count table for the 'age' column
+age_count_table = train_data['age'].value_counts().reset_index()
+
+# Rename the columns for clarity
+age_count_table.columns = ['Age', 'Count']
+age_count_table.head()
+
+
+# In[113]:
+
+
+# Count occurrences grouped by 'age' and 'alzheimers'
+age_ad_count_table = train_data.groupby(['age', 'Alzheimers']).size().reset_index(name='Count')
+age_ad_count_table.columns = ['Age', 'Alzheimers', 'Count']
+age_ad_count_table['Alzheimers'] = age_ad_count_table['Alzheimers'].map({0: 'No', 1: 'Yes'})
+# Display the count table
+age_ad_count_table.head()
+
+
+# In[114]:
+
+
+# Count occurrences grouped by 'age' and 'alzheimers'
+ad_count_table = train_data.groupby(['Alzheimers']).size().reset_index(name='Count')
+ad_count_table.columns = ['Alzheimers', 'Count']
+ad_count_table['Alzheimers'] = ad_count_table['Alzheimers'].map({0: 'No', 1: 'Yes'})
+# Display the count table
+ad_count_table
+
+
+# In[115]:
+
+
+bacteria_overlap = list(set(directional_shap_df['Feature'].tolist()) & set(bacteria_df["species_name"].str.replace("_", " ").tolist()))
+bacteria_overlap[:10]
+
+
+# In[116]:
+
+
+# Assign "bacterial variable" or "clinical variable"
+directional_shap_df["Variable_Type"] = directional_shap_df["Feature"].apply(
+    lambda x: "bacterial" if x in bacteria_list else "clinical"
+)
+
+directional_shap_df
+
+
+# In[117]:
+
+
+# bacteria_overlap, clinical_overlap
+clinical_overlap = directional_shap_df['Feature'][directional_shap_df['Variable_Type']=="clinical"].tolist() 
+features_remain_in_model = clinical_overlap + bacteria_overlap
+features_remain_in_model[:10]
+
+
+# In[118]:
+
+
+base_model = "gpt-4o-mini-2024-07-18"
+base_model_4o = "gpt-4o-2024-11-20"
+
+
+# In[119]:
+
+
+import tiktoken
+
+def count_tokens_in_message(message, model=base_model):
+    import tiktoken
+
+    # Ensure the message is a string (e.g., extract "content" if it's a dictionary)
+    if isinstance(message, dict):
+        message = message.get("content", "")
+    
+    # Load the tokenizer for the specified model
+    encoding = tiktoken.encoding_for_model(model)
+    
+    # Tokenize the message content and return the token count
+    return len(encoding.encode(message))
+
+
+# In[120]:
+
+
+# Calculate the ratio
+no_count = ad_count_table['Count'][ad_count_table['Alzheimers'] == 'No'].values[0]
+yes_count = ad_count_table['Count'][ad_count_table['Alzheimers'] == 'Yes'].values[0]
+
+# Simplify the ratio to its smallest terms
+from math import gcd
+
+def calculate_ratio(x, y):
+    factor = gcd(x, y)
+    return x // factor, y // factor
+
+ratio_no_to_yes = calculate_ratio(no_count, yes_count)
+
+# Display the ratio in '1:x' format
+hc_ad_ratio = f"{ratio_no_to_yes[0]}:{ratio_no_to_yes[1]}"
+print("Ratio (No:Yes):", hc_ad_ratio)
+
+
+# In[121]:
+
+
+base_model
+
+
+# In[122]:
+
+
+import pandas as pd
+from tqdm import tqdm
+from openai import OpenAI
+
+# Initialize OpenAI client (assumes OPENAI_API_KEY is set)
+client = OpenAI()
+
+def get_completion(messages, model, seed=None, temperature=0.0, top_p=0.9):
+    """Generate GPT completion from given messages using the specified model."""
+    try:
+        print(f"Using model: {model} ...")
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            seed=seed,
+            temperature=temperature,
+            top_p=top_p
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+
+def summarize_columns_to_name(row, train_df, ad_df, bc_df, bc_df_hc, bc_df_ad, clinical_dict, bacteria_dict, model, dataset_type="train"):
+    """
+    Summarizes a single row's clinical and microbiome data into a clear, standardized narrative.
+    This agent focuses solely on descriptive summarization using probabilistic language and critical interpretation.
+    It also analyzes machine learning (ML) predictions and SHAP analysis, while noting that such predictions may be imperfect.
+    """
+    print(f"Processing dataset type: {dataset_type}...")
+    
+    sample_id = row['Sample ID']
+    study_id = row['study_id']
+    
+    # Set Alzheimer's status based on dataset type
+    if dataset_type in ["train", "valid"]:
+        ad_status = 'No' if row['Alzheimers'] == 0.0 else 'Yes'
+    else:
+        ad_status = "Unknown"
+        row['Alzheimers'] = "Unknown"
+    
+    # Retrieve diversity metrics (assuming global DataFrames are defined)
+    alpha_diversity = combined_alpha_div_df[combined_alpha_div_df["Sample ID"] == sample_id]
+    beta_div_bray = all_beta_div_results[0].loc[all_beta_div_results[0].index.intersection([sample_id])]
+    beta_div_jaccard = all_beta_div_results[1].loc[all_beta_div_results[1].index.intersection([sample_id])]
+    beta_div_canberra = all_beta_div_results[2].loc[all_beta_div_results[2].index.intersection([sample_id])]
+
+    # Define malnutrition categories
+    malnutrition_categories = {
+        1: "Well-Nourished: Adequate nutrition supports brain health and microbiome balance.",
+        2: "At Risk of Malnutrition: Early nutritional deficiencies may exacerbate cognitive decline.",
+        3: "Malnourished: Severe deficiencies accelerate neurodegeneration via inflammation and gut-brain axis impairment."
+    }
+
+    # Overall diversity methods
+    alpha_measures = ['shannon', 'simpson', 'berger_parker_d']
+    beta_measures = ["braycurtis", "jaccard", "canberra"]
+
+    # Build clinical and microbiome summaries with exclusions (assuming clinical_dict_df and bacteria_dict are DataFrames)
+    exclude_cols = ["Alzheimers"]
+    
+    # Create the clinical data string using the row Series
+    clinical_data = "\n".join(
+        f"{feature}: {row[feature]}" 
+        for feature in clinical_dict_df['Feature Name'].tolist()
+        if feature not in exclude_cols and feature in row.index
+    )
+    
+    # Create the microbiome data string
+    microbiome_data = "\n".join(
+        f"{species}: {row[species]}" 
+        for species in bacteria_dict['species_name'].tolist()
+        if species not in exclude_cols and species in row.index
+    )
+
+    # Final combined overview with diversity metrics
+    patient_overview = f"Clinical Data:\n{clinical_data}\n\nGut Microbiome Data:\n{microbiome_data}"
+    patient_overview += f"\n\nAlpha Diversity (methods: {alpha_measures}): {alpha_diversity.to_dict()}"
+    patient_overview += f"\nBeta Diversity (methods: {beta_measures}): Bray-Curtis {beta_div_bray.to_dict()}, Jaccard {beta_div_jaccard.to_dict()}, Canberra {beta_div_canberra.to_dict()}"
+
+    # Standard token thresholds
+    token_threshold_1 = 8000
+    token_threshold_2 = 16000
+
+    # --- Construct standardized step texts with enhanced interpretation instructions ---
+    step1_text = (
+        f"Step 1: Patient Overview\n"
+        f"Sample ID: {sample_id}\nPatient ID: {study_id}\nVisit Day: {row.get('day', 'N/A')}\n"
+        f"Clinical Details:\n{patient_overview}\n"
+        "Provide a clear description of the patient's demographic and clinical background."
+    )
+
+    # Step 2: Emphasize numerical values and potential impact
+    step2_text = (
+        "Step 2: Key Clinical Markers\n"
+        f"Based on {clinical_data}, identify and describe important clinical markers along with their numeric values (e.g., Malnutrition Score, Frailty Scale, Hospitalizations). "
+        "Discuss how these numbers influence the probability of Alzheimer's disease, drawing on historical data and clinical knowledge. "
+        "For instance, a Malnutrition Score of 2 (At Risk) and a Clinical Frailty Scale of 7 may elevate the Alzheimer's probability."
+    )
+
+    # Step 3: Emphasize bacterial abundance and potential impact
+    step3_text = (
+        f"Step 3: Gut Microbiome Profile\n"
+        f"Based on {microbiome_data}, List and interpret the key bacterial species identified as relevant (e.g., {bacteria_found if 'bacteria_found' in globals() else 'N/A'}). "
+        "Include the relative abundance values for each species and discuss their potential impact on Alzheimer's probability. "
+        "For example, higher abundance of species associated with inflammation may increase the probability, while those linked to gut health may be protective."
+    )
+
+    step4_text = (
+        f"Step 4: Diversity Metrics Analysis\n"
+        f"Evaluate alpha diversity (using methods: {alpha_measures}) and beta diversity (using methods: {beta_measures}) "
+        "to assess the balance of the gut microbial community. Describe what these diversity metrics imply about overall gut health."
+    )
+
+    step5_text = (
+        "Step 5: Interactions and Mechanisms\n"
+        "Discuss potential interactions between clinical markers and gut microbiome features. "
+        "Explain mechanisms (e.g., gut-brain axis, cytokine release, metabolite production) through which these interactions might affect cognitive function."
+    )
+
+    step6_text = (
+        "Step 6: Descriptive Correlation\n"
+        "Integrate clinical, microbiome, and diversity data to describe overall trends. "
+        "Use probabilistic language to express how these factors may collectively influence Alzheimer's disease probability, without making definitive classifications."
+    )
+
+    # Prepare data for longitudinal analysis
+    individual_study_data = test_data_no_normal[test_data_no_normal['study_id'] == study_id].drop(columns=["Alzheimers"])
+    individual_sample_data = test_data_no_normal[test_data_no_normal['Sample ID'] == sample_id].drop(columns=["Alzheimers"])
+
+    def longitudinal_prompt(study_data, sample_data, sample_id, study_id):
+        cognitive_features = ['Atypical Antipsychotics', 'cholinesterase inhibitors', 'Parkinsons', 'SSRIs', 'clinical_frailty_scale']
+        if len(sample_data) > 1:
+            return (
+                f"Longitudinal Analysis:\nMultiple records ({len(sample_data)}) exist for Patient {study_id} (Sample ID: {sample_id}). "
+                f"Current Visit Day: {row.get('day', 'N/A')}. Visit Days: {study_data['day'].tolist()}.\n"
+                f"Current Visit Data: {sample_data.to_json(orient='records')}\n"
+                f"Historical Data: {study_data.to_json(orient='records')}\n"
+                "Focus on trends in cognitive-related features: "
+                f"{study_data[['Sample ID','study_id'] + cognitive_features].to_json(orient='records')}\n"
+            )
+        else:
+            return (
+                f"First-Time Visit Analysis:\nOnly one record exists for Patient {study_id} (Sample ID: {sample_id}). "
+                f"Visit Day: {sample_data['day'].to_json(orient='records')}\n"
+                f"Data: {sample_data.to_json(orient='records')}\n"
+                "Establish this as the baseline for future comparisons.\n"
+            )
+
+    # Retrieve SHAP data for context (assumes combined_force_plot_test_d_sorted is defined)
+    shap_sample_data = combined_force_plot_test_d_sorted[
+        ["Sample ID", "Study ID", "Feature Name", "SHAP Value", "Absolute SHAP Value"]
+    ][combined_force_plot_test_d_sorted["Sample ID"] == sample_id]
+    shap_global_data = (directional_important_shap_df_sort.to_json(orient='records')
+                        if 'directional_important_shap_df_sort' in globals() else "N/A")
+
+    # Step 7: ML Analysis and SHAP Assessment with Probabilistic Language
+    ml_prob = ml_prediction['Predicted Percentage'][ml_prediction['Sample ID'] == sample_id].iloc[0]
+    step7_text = (
+        "Step 7: Machine Learning Analysis and Probabilistic Assessment\n"
+        f"ML Prediction: The model indicates a {ml_prob*100}% probability for Alzheimer's classification. "
+        "Note: ML predictions are derived from historical data and may contain errors; they should be interpreted with caution.\n\n"
+        "SHAP Analysis:\n"
+        " - SHAP values explain the contribution of each feature to the model's prediction.\n"
+        f" - SHAP Data for Sample: {shap_sample_data.to_json(orient='records')}\n"
+        f" - Global SHAP Summary: {shap_global_data}\n\n"
+        f"{longitudinal_prompt(individual_study_data, individual_sample_data, sample_id, study_id)}\n"
+        "Discuss how the ML prediction, together with the detailed SHAP analysis, integrates with the clinical and microbiome evidence. "
+        "Highlight any discrepancies or uncertainties in the data interpretation."
+    )
+
+    step8_text = (
+        "Step 8: Final Comprehensive Descriptive Summary\n"
+        "Integrate all findings—from clinical data, gut microbiome profiles, diversity metrics, and ML/SHAP analysis—into a clear, standardized narrative. "
+        "Use probabilistic language to express the overall probability of Alzheimer's disease, taking into account potential ML prediction errors. "
+        "Provide a critical interpretation of how the various data points interact, and emphasize the need for expert review to refine these insights."
+    )
+
+    # Compile all step texts into a list and get RAG context for each step
+    step_texts = [step1_text, step2_text, step3_text, step4_text, step5_text, step6_text, step7_text, step8_text]
+    rag_results = {}
+    similarity_threshold = 0.7
+    top_k = 5
+    for i, text in enumerate(step_texts, start=1):
+        print(f"Processing RAG for Step {i} ...")
+        current_top_k = 10 if i == len(step_texts) else top_k
+        rag_results[f"step{i}_rag"] = rag_model(test_query=text, top_k=current_top_k, similarity=similarity_threshold)
+    
+    # Prepare the user message content in standardized format
+    user_message_content = (
+        "**Standardized Descriptive Summary of Clinical and Microbiome Data**\n\n"
+        f"Clinical Data Dictionary: {clinical_dict}\n"
+        f"Bacteria Data Dictionary: {bacteria_dict}\n\n"
+        "This summarization agent produces a clear, logical narrative using probabilistic language to describe the subject's Alzheimer's disease probability. "
+        "A subsequent classification agent will perform binary classification based on this description.\n\n"
+    )
+    for i, step_text in enumerate(step_texts, start=1):
+        user_message_content += f"{step_text}\nExplanation Context: {rag_results[f'step{i}_rag']}\n\n"
+    
+    user_message = {"role": "user", "content": user_message_content}
+    
+    # Prepare the system message ensuring all placeholders are resolved and 'risk' is replaced by 'probability'
+    system_message = {
+        "role": "system",
+        "content": (
+            "**Role:** Summarization and Learning Agent\n"
+            "**Purpose:** Generate a clear and logical diagnostic summary for Alzheimer's disease using clinical, microbiome, and computational data. "
+            "This agent focuses solely on descriptive summarization using probabilistic language; binary classification will be performed later.\n\n"
+            f"Study Subjects in Training:\n- Healthy Controls: {hc_ids_tr if 'hc_ids_tr' in globals() else 'N/A'}\n"
+            f"- Alzheimer's Patients: {ad_ids_tr if 'ad_ids_tr' in globals() else 'N/A'}\n\n"
+            "**Scope and Focus:**\n"
+            "- Integrate species-level microbiome data, clinical variables, SHAP analysis, and diversity metrics into a unified descriptive summary.\n"
+            "- Emphasize clarity, logical structure, and probabilistic descriptions of Alzheimer's disease probability, while considering potential ML prediction errors.\n\n"
+            "**Expectations:**\n"
+            "- Use SHAP values to describe the influence of key features with associated numbers.\n"
+            f"- Malnutrition Categories: {malnutrition_categories}\n"
+            "- Incorporate historical data to enhance context and adjust for potential ML prediction mistakes.\n"
+            "**Output Guidelines:**\n"
+            "- Produce a structured, step-by-step narrative summarizing all data sources in a standardized format.\n"
+            "- Focus on clear, logical explanations that reveal data interpretation and avoid definitive categorical assignments."
+        )
+    }
+    
+    messages = [system_message, user_message]
+
+    # Optional: Token counting (if function is available)
+    token_count_system = count_tokens_in_message(system_message) if 'count_tokens_in_message' in globals() else None
+    token_count_user = count_tokens_in_message(user_message) if 'count_tokens_in_message' in globals() else None
+    if token_count_system is not None and token_count_user is not None:
+        total_tokens = token_count_system + token_count_user
+        print(f"Total token count: {total_tokens}")
+    
+    # Generate the final descriptive summary using the base model (base_model must be defined)
+    final_response = get_completion(messages, model)
+    return final_response
+
+def summarization_agent(dataset_type, test_df, train_df, ad_df, bc_df, bc_df_hc, bc_df_ad, clinical_dict, bacteria_dict, model, top_summ=5, seed=None):
+    """
+    Processes the specified dataset and generates standardized, clear summaries for each sample.
+    The output describes the study subject's Alzheimer's disease probability using probabilistic language,
+    and analyzes ML predictions with caution.
+    """
+    print(f"Processing {dataset_type} dataset...")
+    results = []
+    
+    # Shuffle dataset (for train/validation; test assumed already shuffled)
+    shuffle_df = test_df.sample(n=min(len(test_df), top_summ), random_state=seed)
+    
+    for _, row in tqdm(shuffle_df.iterrows(), total=len(shuffle_df), desc=f"Generating summaries for {dataset_type}"):
+        sample_id = row["Sample ID"]
+        ad_status = 'Yes' if row['Alzheimers'] == 1.0 else 'No'
+        
+        summary_text = summarize_columns_to_name(
+            row=row,
+            train_df=train_df,
+            ad_df=ad_df,
+            bc_df=bc_df,
+            bc_df_hc=bc_df_hc,
+            bc_df_ad=bc_df_ad,
+            clinical_dict=clinical_dict,
+            bacteria_dict=bacteria_dict,
+            model=model,
+            dataset_type=dataset_type
+        )
+        
+        results.append({
+            'Dataset': dataset_type,
+            'Sample ID': sample_id,
+            'Alzheimers': ad_status,
+            'Summary': summary_text.strip(),
+            'Formatted Summary': summary_text
+        })
+    
+    dataset_result_df = pd.DataFrame(results)
+    print(f"{dataset_type.capitalize()} dataset summaries generated.")
+    return dataset_result_df
+
+
+# In[123]:
+
+
+ml_prediction
+
+
+# In[124]:
+
+
+# Convert both columns to sets for comparison
+train_sample_ids = set(train_data['Sample ID'])
+test_sample_ids = set(test_data["Sample ID"])
+
+# Find the overlap
+overlap = train_sample_ids.intersection(test_sample_ids)
+
+# Display the result
+if overlap:
+    print(f"Overlap found: {len(overlap)} matching Sample IDs.")
+    print("Matching Sample IDs:", overlap)
+else:
+    print("No overlap Sample IDs found between full train_results and test_results.")
+
+# Convert both columns to sets for comparison
+train_study_ids = set(train_data['study_id'])
+test_study_ids = set(test_data["study_id"])
+
+# Find the overlap
+overlap = train_study_ids.intersection(test_study_ids)
+
+# Display the result
+if overlap:
+    print(f"Overlap found: {len(overlap)} matching Study IDs.")
+    print("Matching Study IDs:", overlap)
+else:
+    print("No overlap Study IDs found between full train_results and test_results.")
+
+
+# In[125]:
+
+
+bacteria_df
+
+
+# In[126]:
+
+
+bacteria_dict = pd.read_csv(f"..{os.sep}data{os.sep}bacteria_df.csv")
+print(bacteria_df.shape)
+
+filtered_bacteria_df = bacteria_df[bacteria_df["species_name"].isin(bacteria_overlap)]#.isin([item.replace(" ", "_") for item in bacteria_overlap])]
+filtered_bacteria_df.shape
+
+
+# In[127]:
+
+
+filtered_bacteria_df.head()
+
+
+# In[128]:
+
+
+# First, make an explicit copy of the filtered DataFrame
+filtered_bacteria_df = filtered_bacteria_df.copy()
+
+# Now extract genus name
+filtered_bacteria_df['genus_name'] = filtered_bacteria_df['taxonomy_hierarchy'].apply(
+    lambda x: x.split('|')[-2].split('__')[-1]
+)
+
+# Rename the "summary" column to "species_description"
+filtered_bacteria_df = filtered_bacteria_df.rename(columns={"summary": "species_description"})
+
+# Rearrange columns
+filtered_bacteria_df = filtered_bacteria_df[['taxonomy_hierarchy', 'genus_name', 'species_name', 'species_description']]
+filtered_bacteria_df.head()
+
+
+# In[129]:
+
+
+filtered_bacteria_df.head()['taxonomy_hierarchy'].tolist()[0]
+
+
+# In[130]:
+
+
+filtered_clinical_dict_df = clinical_variable_explanations_df[clinical_variable_explanations_df["Feature Name"].isin(directional_shap_df['Feature'][directional_shap_df['Variable_Type']=="clinical"].tolist())]
+filtered_clinical_dict_df
+
+
+# In[131]:
+
+
+clinical_microbiome_df.malnutrition_indicator_sco.value_counts()
+
+
+# In[132]:
+
+
+clinical_dict_df['Feature Name'].tolist()[:5]
+
+
+# In[133]:
+
+
+bacteria_dict['species_name'].tolist()[:5]
+
+
+# In[134]:
+
+
+clinical_microbiome_tt
+
+
+# In[135]:
+
+
+base_model, base_model_4o
+
+
+# In[136]:
+
+
+ad_df
+
+
+# In[137]:
+
+
+# Construct the path directly instead of using glob
+summarization_output_path = f"local_resources{os.sep}experiment{experiment_number:02d}{os.sep}summarization{os.sep}"
+
+# Create directory if it doesn't exist (exist_ok=True handles both cases)
+os.makedirs(summarization_output_path, exist_ok=True)
+
+# Construct output file path
+summarization_output_file_path = os.path.join(summarization_output_path, f"summarization_agent_output_{base_model_4o}.csv")
+
+# Check if file exists
+if os.path.isfile(summarization_output_file_path):
+   # If file exists, just read it
+   test_df = pd.read_csv(summarization_output_file_path)
+   print(f"Loading existing file from: {summarization_output_file_path}")
+else:
+   # If file doesn't exist, run the summarization agent and save results
+   print("File not found. Running summarization agent...")
+   data_feed = clinical_microbiome_tt # [clinical_microbiome_tt['Sample ID']=='FB246']
+   # hc_ids_tr, ad_ids_tr, ad_df_tr, bc_df_tr, bc_df_hc_tr, bc_df_ad_tr
+   test_df = summarization_agent(
+       dataset_type="test",
+       test_df=data_feed,
+       train_df=None, # ADAM 2.0 will involve train_df in LLM.
+       ad_df=None, # ADAM 2.0 will involve ad_df_tr,
+       bc_df=None, # ADAM 2.0 will involve bc_df_tr,
+       bc_df_hc=None, # ADAM 2.0 will involve bc_df_hc_tr,
+       bc_df_ad=None, # ADAM 2.0 will involve bc_df_ad_tr,
+       clinical_dict=filtered_clinical_dict_df,
+       bacteria_dict=filtered_bacteria_df,
+       model=base_model_4o,
+       top_summ=data_feed.shape[0],
+       seed=seed
+   )
+   # Create directory if it doesn't exist
+   os.makedirs(summarization_output_path, exist_ok=True)
+   # Save the file
+   test_df.to_csv(summarization_output_file_path, index=False)
+   print(f"File saved to: {summarization_output_file_path}")
+
+test_df.head()
+
+
+# In[138]:
+
+
+ml_prediction[ml_prediction['Sample ID']=='DC094']
+
+
+# In[139]:
+
+
+clinical_microbiome_df[clinical_microbiome_df['Sample ID']=='DC094']['Alzheimers']
+
+
+# In[140]:
+
+
+seed, experiment_number
+
+
+# In[141]:
+
+
+filtered_bacteria_df = filtered_bacteria_df.rename(columns={
+    "summary": "species_description",
+})
+
+bacteria_dict_mapping = deepcopy(filtered_bacteria_df[['species_name','species_description']])
+bacteria_dict_mapping['species_name'] = bacteria_dict_mapping['species_name'].str.replace("_", " ")
+# Rename bacteria_dict_mapping columns to align with clinical_dict_mapping
+bacteria_dict_mapping = bacteria_dict_mapping.rename(columns={
+    "species_name": "Feature Name",
+    "species_description": "Feature Explanation"
+})
+bacteria_dict_mapping.head()
+
+
+# In[142]:
+
+
+clinical_dict_mapping = filtered_clinical_dict_df[['Feature Name','Feature Explanation']].copy()
+clinical_dict_mapping.head()
+
+
+# In[143]:
+
+
+# Add a source column to identify data origin
+bacteria_dict_mapping["Source"] = "bacteria"
+clinical_dict_mapping["Source"] = "clinical"
+
+# Vertically concatenate the DataFrames
+bacteria_clinical_dict_df = pd.concat([bacteria_dict_mapping, clinical_dict_mapping], axis=0, ignore_index=True)
+
+# Display the merged DataFrame
+bacteria_clinical_dict_df.head()
+
+
+# In[144]:
+
+
+bacteria_dict_mapping['Feature Name'].tolist()[:5]
+
+
+# In[145]:
+
+
+from contextlib import contextmanager
+import sys
+
+@contextmanager
+def suppress_print():
+    """
+    Context manager to suppress print statements temporarily.
+    """
+    original_stdout = sys.stdout
+    try:
+        sys.stdout = open(os.devnull, 'w')  # Redirect stdout to null
+        yield
+    finally:
+        sys.stdout = original_stdout  # Restore original stdout
+
+
+# In[146]:
+
+
+age_count_table
+
+
+# In[147]:
+
+
+age_ad_count_table
+
+import pandas as pd
+from pandasai import SmartDataframe
+from pandasai.llm.openai import OpenAI as OpenAI_df
+import os
+llm_df = OpenAI_df(model=base_model, temperature=0, top_p=0.9, seed=seed,)
+age_ad_count_table_smart = age_ad_count_table.copy()
+##### Wrap the DataFrame with PandasAI
+age_ad_count_df = SmartDataframe(age_ad_count_table_smart, config={"llm": llm_df, "enable_cache": False, "enforce_privacy": True})
+##### Ask a natural language question
+age_group_response = age_ad_count_df.chat("Which age group is more likely to have Alzheimer's disease? Give me a range. Answer the question in text.")
+print(age_group_response)
+
+
+# In[148]:
+
+
+import pandasai
+print(pandasai.__version__.__version__)
+
+
+# In[149]:
+
+
+len(bacteria_clinical_dict_df['Feature Name'].tolist())
+
+
+# In[150]:
+
+
+train_all_data_smart = train_data[["Alzheimers", "age"]+selected_feature_names].copy()
+
+##### Wrap the DataFrame with PandasAI
+train_all_data_smart = SmartDataframe(train_all_data_smart, config={"llm": llm_df, "enable_cache": False, "enforce_privacy": True})
+##### Ask a natural language question
+selected_bacteria_variables_string = ", ".join(map(str, bacteria_clinical_dict_df['Feature Name'][bacteria_clinical_dict_df['Source']=="bacteria"].tolist()))
+selected_clinical_variables_string = ", ".join(map(str, ['age']+bacteria_clinical_dict_df['Feature Name'][bacteria_clinical_dict_df['Source']=="clinical"].tolist()))
+train_all_data_smart_response = train_all_data_smart.chat(f"In a text paragraph, given the variable name Alzheimers is the target variable, summarize the differences between Alzheimer's patients (1.0) and healthy controls (0.0) from both clinical variables such as {selected_bacteria_variables_string} and bacteria variables such as {selected_bacteria_variables_string} perspective? Answer the question in a text paragraph.")
+print(train_all_data_smart_response)
+
+
+# In[151]:
+
+
+train_bacteria_data_smart = train_data[["Alzheimers", "age"]+bacteria_clinical_dict_df['Feature Name'][bacteria_clinical_dict_df['Source']=="bacteria"].tolist()].copy()
+
+##### Wrap the DataFrame with PandasAI
+train_bacteria_data_smart = SmartDataframe(train_bacteria_data_smart, config={"llm": llm_df, "enable_cache": False, "enforce_privacy": True})
+##### Ask a natural language question
+train_bacteria_data_smart_response = train_bacteria_data_smart.chat("In a text paragraph, given the variable name Alzheimers is the target variable, summarize the differences between Alzheimer's patients and healthy controls? Answer the question in a text paragraph.")
+print(train_bacteria_data_smart_response)
+
+
+# In[152]:
+
+
+train_clinical_data_smart = train_data[["Alzheimers"]+bacteria_clinical_dict_df['Feature Name'][bacteria_clinical_dict_df['Source']=="clinical"].tolist()].copy()
+
+##### Wrap the DataFrame with PandasAI
+train_clinical_data_smart = SmartDataframe(train_clinical_data_smart, config={"llm": llm_df, "enable_cache": False, "enforce_privacy": True})
+##### Ask a natural language question
+train_clinical_data_smart_response = train_clinical_data_smart.chat("In a text paragraph, Given the variable name Alzheimers is the target variable, summarize the differences between Alzheimer's patients and healthy controls? Answer the question in a text paragraph.")
+print(train_clinical_data_smart_response)
+
+
+# In[153]:
+
+
+# Calculate the ratio
+no_count = ad_count_table['Count'][ad_count_table['Alzheimers'] == 'No'].values[0]
+yes_count = ad_count_table['Count'][ad_count_table['Alzheimers'] == 'Yes'].values[0]
+
+# Simplify the ratio to its smallest terms
+from math import gcd
+
+def calculate_ratio(x, y):
+    factor = gcd(x, y)
+    return x // factor, y // factor
+
+ratio_no_to_yes = calculate_ratio(no_count, yes_count)
+
+# Display the ratio in '1:x' format
+hc_ad_ratio = f"{ratio_no_to_yes[0]}:{ratio_no_to_yes[1]}"
+print("Ratio (No:Yes):", hc_ad_ratio)
+
+
+# In[154]:
+
+
+def custom_query_completion(query, row, model):
+    """
+    Wrapper to call custom_completion with the query, row, and model.
+    """
+    return custom_completion(query=query, row=row, model=model)
+
+def custom_completion(query, row, model=None):
+    """
+    Process the query with the row data and generate completion.
+    """
+    # Create a row summary to pass additional context
+    row_summary = "\n".join([f"{col}: {row[col]}" for col in row.index if pd.notnull(row[col])])
+
+    ##### Wrap the DataFrame with PandasAI
+    # row_smart_df = SmartDataframe(row, config={"llm": llm_df, "enable_cache": False, "enforce_privacy": True})
+    ##### Ask a natural language question
+    sample_id = row['Sample ID']
+    study_id = row['study_id']
+    print(f"Sample ID: {sample_id}, Study ID: {study_id}.")
+    
+    # First get this sample's SHAP values
+    filtered_test_shap_sample_df = combined_force_plot_test_d_sorted[
+        ["Sample ID", "Study ID", "Feature Name", "SHAP Value", "Absolute SHAP Value"]
+    ][
+        (combined_force_plot_test_d_sorted["Sample ID"] == sample_id) &
+        (combined_force_plot_test_d_sorted["Absolute SHAP Value"] >= 0.1)
+    ].merge(
+        sample_study_day_df[['Sample ID', 'day']],
+        on='Sample ID',
+        how='left'
+    )
+    
+    # Get the study ID from this sample
+    current_study_id = filtered_test_shap_sample_df['Study ID'].iloc[0] if not filtered_test_shap_sample_df.empty else study_id
+    
+    # Get SHAP values for all samples in this study
+    filtered_test_shap_study_df = combined_force_plot_test_d_sorted[
+        ["Sample ID", "Study ID", "Feature Name", "SHAP Value", "Absolute SHAP Value"]
+    ][
+        (combined_force_plot_test_d_sorted["Study ID"] == current_study_id) & 
+        (combined_force_plot_test_d_sorted["Absolute SHAP Value"] >= 0.1)
+    ].merge(
+        sample_study_day_df[['Sample ID', 'study_id', 'day']],
+        on='Sample ID',
+        how='left'
+    )
+    
+    # Get only the observations that have a day value less than or equal to the current sample's day
+    current_sample_day = filtered_test_shap_sample_df['day'].max() if not filtered_test_shap_sample_df.empty else 0
+    filtered_test_shap_study_df = filtered_test_shap_study_df[
+        filtered_test_shap_study_df['day'] <= current_sample_day
+    ]
+    
+    # Check if this is the only/first sample for this patient
+    is_first_sample = len(filtered_test_shap_study_df['day'].unique()) <= 1
+    
+    if is_first_sample:
+        sample_visit = (
+            "Patient status classification: Baseline Visit. "
+            "This is the first recorded sample for this study subject (Day 0). "
+            "Use this sample as a reference for establishing initial biomarker values. "
+            "Analyze this sample to determine the probability of Alzheimer's disease at baseline. "
+            "No prior SHAP values exist for comparison.\n"
+            f"{filtered_test_shap_sample_df.to_json(orient='records', indent=1)}"
+        )
+    else:
+        # Format the day values for display
+        sample_days = sorted(filtered_test_shap_sample_df['day'].unique())
+        study_days = sorted(filtered_test_shap_study_df['day'].unique())
+        
+        sample_visit = (
+            f"Patient status classification: Current Visit (Day {sample_days}). "
+            f"This sample was collected on these visit days: {study_days}. "
+            "Compare each visit's data with prior visits to update the probability of Alzheimer's disease. "
+            "Assess whether biomarker changes and SHAP value variations indicate progression or stability.\n"
+            f"{filtered_test_shap_study_df.to_json(orient='records', indent=1)}"
+        )
+    
+    alpha_diversity_shannon = all_alpha_div_results[0][all_alpha_div_results[0]['Sample ID']==sample_id]
+    alpha_diversity_shannon_all = all_alpha_div_results[0]
+    
+    alpha_diversity_simpson = all_alpha_div_results[1][all_alpha_div_results[0]['Sample ID']==sample_id]
+    alpha_diversity_simpson_all = all_alpha_div_results[1]
+    
+    alpha_diversity_berger_parker_d = all_alpha_div_results[2][all_alpha_div_results[0]['Sample ID']==sample_id]
+    alpha_diversity_berger_parker_d_all = all_alpha_div_results[2]
+    
+    # Beta Diversity calculations
+    beta_diversity_braycurtis = all_beta_div_results[0].loc[[sample_id]]
+    beta_diversity_braycurtis_all = all_beta_div_results[0]
+    
+    beta_diversity_jaccard = all_beta_div_results[1].loc[[sample_id]]
+    beta_diversity_jaccard_all = all_beta_div_results[1]
+    
+    beta_diversity_canberra = all_beta_div_results[2].loc[[sample_id]]
+    beta_diversity_canberra_all = all_beta_div_results[2]
+
+    # System message setup with focus on reducing false positives
+    system_message = {
+        "role": "system",
+        "content": (
+            "**Objective**: Perform binary classification ('Yes' / 'No') for Alzheimer's disease status.\n\n"
+            "**Guidelines**:\n"
+            "- **Historical Data Insights**:\n"
+            "  - Differences between Alzheimer's study objects (1.0) and healthy controls (0.0):\n"
+            f"    - Clinical variables ({selected_clinical_variables_string}): {train_clinical_data_smart_response}\n"
+            f"    - Bacterial variables ({selected_bacteria_variables_string}): {train_bacteria_data_smart_response}\n"
+            f"    - Combined clinical & bacterial variables: {train_all_data_smart_response}\n\n"
+            "- **Diversity Metrics & Classification Refinement**:\n"
+            "  - **Alpha Diversity Thresholds**:\n"
+            f"    - Shannon Index: Adjust classification if outlier detected ({alpha_diversity_shannon_all}).\n"
+            f"    - Simpson Index: Lower threshold for cases exceeding {alpha_diversity_simpson_all}.\n"
+            f"    - Berger-Parker Index: Prioritize cases with extreme values ({alpha_diversity_berger_parker_d_all}).\n"
+            "  - **Beta Diversity Considerations**:\n"
+            f"    - Bray-Curtis: Evaluate outlier impact ({beta_diversity_braycurtis_all}).\n"
+            f"    - Jaccard: If deviation is >{beta_diversity_jaccard_all}, compare to misclassified samples.\n"
+            f"    - Canberra: Ensure correction in borderline cases ({beta_diversity_canberra_all}).\n\n"
+            "- **Adaptive Threshold Decisioning**:\n"
+            "  - Adjust classification dynamically based on feature impact and historical misclassification trends.\n"
+            "  - Apply Bayesian probability adjustment when classification falls in the **40%-50%** range.\n"
+            "  - **If top 3 SHAP features indicate 'Yes'**, lower classification threshold to **35%-40%**.\n"
+            "  - **If the patient has high frailty (>7.0) and bacterial diversity imbalance**, classify as 'Yes' even at lower probability.\n\n"
+            "- **Handling Edge Cases & Misclassifications**:\n"
+            "  - Compare test sample against misclassified cases before making a final decision.\n"
+            "  - If past similar cases were misclassified, adjust the probability threshold based on cumulative evidence.\n\n"
+            "**Output Format**:\n"
+            "- Classification: **Yes/No**\n"
+            "- Confidence: **Probability (%)**\n"
+            "- Justification: **Explain using SHAP, diversity metrics, and past misclassifications.**\n"
+            "- Reflection: **Indicate if the decision was adjusted based on misclassification trends.**"
+        )
+    }
+
+    # RAG model retrieval
+    rag_result = rag_model(test_query=query, top_k=5, similarity=0.7)
+
+    explanations = []
+    
+    # Loop through each feature and its value
+    for feature_name in ['age']+selected_feature_names:
+        feature_value = row[feature_name]
+        feature_name_definition = bacteria_clinical_dict_df[bacteria_clinical_dict_df['Feature Name']==feature_name].to_json(orient='records')
+        
+        query_text = f"Explain the meaning of feature name '{feature_name}' defined as {feature_name_definition}, with value '{feature_value}' for Alzheimer's disease status."
+
+        # Feature Meaning Query and RAG Adjustment
+        if feature_name in bacteria_dict_mapping['Feature Name'].tolist() and feature_value == 0:
+            print(f"No **bacterial** feature value: Feature name {feature_name} and its value {feature_value} associated to Sample ID {sample_id}.")
+            rag_result = bacteria_dict_mapping['Feature Explanation'][bacteria_dict_mapping['Feature Name'] == feature_name].values[0]
+        else:
+            print(f"Has feature value: Feature name {feature_name} and its value {feature_value} associated to Sample ID {sample_id}.")
+            query_text = f"Explain the meaning of feature name '{feature_name}' defined as {feature_name_definition}, with value '{feature_value}' for Alzheimer's disease status."
+            with suppress_print():
+                rag_result = rag_model(test_query=query_text, top_k=1, similarity=0.7)
+
+        explanations.append({
+            "Feature Name": feature_name,
+            "Feature Value": feature_value,
+            "Explanation": rag_result
+        })
+        
+    # Construct user message
+    user_message = {
+        "role": "user",
+        "content": (
+            "**Task**:\n"
+            "Predict whether the study object is in an Alzheimer's disease state ('Yes') or not ('No').\n\n"
+            "**Prevalence Context**:\n"
+            f"- The assumed ratio of healthy controls to Alzheimer's cases in the study dataset is {hc_ad_ratio}.\n\n"
+            "**Study Object Data**:\n"
+            f"{sample_visit}\n\n"
+            "**Comprehensive Summary of this Visit**:\n"
+            f"{row['Formatted Summary']}\n\n"
+            "**SHAP Feature Importance**:\n"
+            f"{combined_force_plot_test_d_sorted[combined_force_plot_test_d_sorted['Sample ID'] == sample_id]}\n\n"
+            "**Diversity Metrics Evaluation**:\n"
+            "  - **Alpha Diversity Adjustments**:\n"
+            f"    - Shannon Index: {alpha_diversity_shannon}\n"
+            f"    - Simpson Index: {alpha_diversity_simpson}\n"
+            f"    - Berger-Parker Index: {alpha_diversity_berger_parker_d}\n\n"
+            "  - **Beta Diversity Adjustments**:\n"
+            f"    - Bray-Curtis: {beta_diversity_braycurtis}\n"
+            f"    - Jaccard: {beta_diversity_jaccard}\n"
+            f"    - Canberra: {beta_diversity_canberra}\n\n"
+            "**Retrieved Context (RAG-based Adjustments)**:\n"
+            f"{rag_result}\n\n"
+            "**Key Considerations for Prediction & Misclassification Adjustments**:\n"
+            f"{explanations}\n\n"
+            "**Prediction Decision Rules**:\n"
+            "1. **Confidence Threshold Optimization**:\n"
+            "   - Predict 'Yes' if probability **> 50%**.\n"
+            "   - Predict 'No' if probability **< 50%**.\n"
+            "   - If probability is **between 40%-50%**, compare with past misclassifications before finalizing.\n"
+            "   - **Apply Bayesian adjustment** for cases with feature overlap with misclassified samples.\n"
+            "2. **Feature Impact Adjustments**:\n"
+            "   - If top 3 SHAP features favor 'Yes', lower confidence threshold to **35%-40%**.\n"
+            "   - If the study object has high frailty (>7.0) and bacterial diversity imbalance, classify as 'Yes' even at 35%-40% probability.\n"
+            "3. **Self-Evaluation Using Historical Misclassifications**:\n"
+            "   - Compare this case with **previously misclassified cases** and adjust probability thresholds accordingly.\n\n"
+            "**Output Format**:\n"
+            "- Prediction: **Yes/No**\n"
+            "- Confidence: **Probability (%)**\n"
+            "- Justification: **Explain the decision using retrieved data and feature impact.**\n"
+            "- Reflection: **Indicate sources of possible misclassification and suggested refinements.**"
+        )
+    }
+
+    # Generate the response
+    messages = [system_message, user_message]
+
+    # Optional: Token counting (if function is available)
+    token_count_system = count_tokens_in_message(system_message) if 'count_tokens_in_message' in globals() else None
+    token_count_user = count_tokens_in_message(user_message) if 'count_tokens_in_message' in globals() else None
+    if token_count_system is not None and token_count_user is not None:
+        total_tokens = token_count_system + token_count_user
+        print(f"Total token count: {total_tokens}")
+    
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=0,
+        top_p=0.9,
+        seed=seed,
+    )
+    return response.choices[0].message.content
+
+def process_test_df(test_df, model):
+    """
+    Feed each row of test_df into custom_query_completion.
+    """
+    results = []
+    for _, row in tqdm(test_df.iterrows(), total=len(test_df), desc="Processing rows"):
+        query = f"Does the Sample ID {row['Sample ID']} have Alzheimer's based on the data provided?"
+        completion = custom_query_completion(query=query, row=row, model=model)
+        results.append({"Sample ID": row["Sample ID"], "Completion": completion})
+    return results
+
+
+# In[155]:
+
+
+all_alpha_div_results[2]
+
+
+# In[156]:
+
+
+# Combine results into a DataFrame for clarity
+ml_test_results_df = pd.DataFrame({
+    "Sample ID": test_data["Sample ID"].values,
+    "True Label": y_test,
+    "Predicted Label": y_test_pred_binary,
+    "Confidence (Class 1 Probability)": y_test_pred
+})
+
+ml_test_results_df = ml_test_results_df[ml_test_results_df["Sample ID"].isin(test_data["Sample ID"].values)].copy()
+
+# Print the predictions with confidence
+print("\nPredictions with Confidence:")
+ml_test_results_to_agent = ml_test_results_df[['Sample ID', 'Predicted Label', 'Confidence (Class 1 Probability)']]
+ml_test_results_to_agent["Predicted Alzheimers"] = np.where(
+    ml_test_results_to_agent['Predicted Label'] == 0,
+    "No",
+    "Yes"
+)
+ml_test_results_to_agent.rename(columns={"Predicted Label": "Predicted Alzheimers Label"}, inplace=True)
+
+ml_test_results_to_agent.rename(columns={"Confidence (Class 1 Probability)": "Probability of Alzheimers = Yes"}, inplace=True)
+print(ml_test_results_to_agent.shape)
+ml_test_results_to_agent
+
+
+# In[157]:
+
+
+# Predictions and Evaluation
+y_test_pred = final_model.predict(dtest_final)
+y_test_pred_binary = (y_test_pred >= 0.5).astype(int)
+auc = roc_auc_score(y_test, y_test_pred)
+accuracy = accuracy_score(y_test, y_test_pred_binary)
+f1 = f1_score(y_test, y_test_pred_binary)
+conf_matrix = confusion_matrix(y_test, y_test_pred_binary)
+
+
+# In[158]:
+
+
+test_merged_df = pd.merge(test_df[['Sample ID', 'Summary', 'Formatted Summary']], test_data, on="Sample ID", how="inner")  # Use "inner" for common rows
+test_merged_df.head()
+
+
+# In[159]:
+
+
+test_merged_df_no_target = test_merged_df.drop(columns=["Alzheimers", "Summary"])
+test_merged_df_no_target
+
+
+# In[160]:
+
+
+test_merged_df_ml_no_target = pd.merge(test_merged_df_no_target, ml_test_results_to_agent, on="Sample ID", how="inner")  # Use "inner" for common rows
+test_merged_df_ml_no_target.head()
+
+
+# In[161]:
+
+
+base_model, base_model_4o
+
+
+# In[162]:
+
+
+ad_df=ad_df_tt,
+bc_df=bc_df_tt,
+bc_df_hc=bc_df_hc_tt,
+bc_df_ad=bc_df_ad_tt,
+train_df=clinical_microbiome_tr,
+clinical_dict=filtered_clinical_dict_df,
+bacteria_dict=filtered_bacteria_df,
+
+
+# In[163]:
+
+
+sample_study_day_df = clinical_microbiome_df[['Sample ID', 'study_id', 'day']]
+sample_study_day_df
+
+
+# In[164]:
+
+
+# Process the test DataFrame
+test_combined_results = process_test_df(test_merged_df_ml_no_target, base_model)
+
+
+# In[165]:
+
+
+test_combined_results = pd.DataFrame(test_combined_results)
+test_combined_results
+
+
+# In[166]:
+
+
+# Perform an inner join on "Sample ID" to combine results_df with test_df
+test_merged_df = pd.merge(test_df, test_combined_results, on="Sample ID", how="inner")
+
+test_results = test_merged_df[["Dataset", "Sample ID", "Alzheimers", "Formatted Summary", "Completion"]]
+test_results['Predicted Alzheimers'] = test_results['Completion'].apply(lambda x: 'Yes' if '**Prediction**: **Yes**' in x else 'No')
+# Rename columns in the DataFrame
+test_results.rename(
+    columns={
+        "Alzheimers": "Alzheimers Text",
+        "Predicted Alzheimers": "Predicted Alzheimers Text"
+    },
+    inplace=True
+)
+
+test_results
+
+
+# In[167]:
+
+
+test_merged_df = pd.merge(test_df, test_combined_results, on="Sample ID", how="inner")
+test_results = test_merged_df[["Dataset", "Sample ID", "Formatted Summary", "Completion", "Alzheimers"]]
+
+def extract_prediction(completion_text):
+    # Look for different patterns of "Prediction: Yes" with varying formats and spacing
+    prediction_pattern = re.compile(r'\*\*\s*Prediction\s*\*\*\s*:\s*\*?\*?\s*(Yes|No)', re.IGNORECASE)
+    match = prediction_pattern.search(completion_text)
+    
+    if match:
+        prediction = match.group(1)
+        return 'Yes' if prediction.lower() == 'yes' else 'No'
+    else:
+        # Fallback for other formats
+        if 'yes' in completion_text.lower():
+            return 'Yes'
+        else:
+            return 'No'
+
+# Apply the function to extract predictions
+test_results['Predicted Alzheimers'] = test_results['Completion'].apply(extract_prediction)
+
+# Rename columns in the DataFrame
+test_results.rename(
+    columns={
+        "Alzheimers": "Ground Truth",
+        "Predicted Alzheimers": "Prediction",
+        "Completion": "Conclusion",
+    },
+    inplace=True
+)
+# Construct the path directly instead of using glob
+classification_output_path = f"local_resources{os.sep}experiment{experiment_number:02d}{os.sep}classification{os.sep}"
+
+# Create directory if it doesn't exist (exist_ok=True handles both cases)
+os.makedirs(classification_output_path, exist_ok=True)
+
+# Construct output file path
+classification_output_file_path = os.path.join(classification_output_path, f"classification_agent_output_{base_model}.csv")
+test_results.to_csv(classification_output_file_path, index=False)
+
+test_results
+
+
+# In[168]:
+
+
+# test_results.to_csv(f"classification_agent_output.csv", index=False)
+
+
+# In[169]:
+
+
+test_results[(test_results['Ground Truth']==test_results['Prediction'])]
+
+
+# In[170]:
+
+
+#print(test_results['Conclusion'][test_results['Sample ID']=='FB246'].values[0])
+#print(test_results['Formatted Summary'][test_results['Sample ID']=='FB246'].values[0])
+
+
+# In[171]:
+
+
+from sklearn.metrics import f1_score
+
+# Ensure the "Alzheimers" and "Predicted Alzheimers Status" columns are in the same format
+# Convert "Yes"/"No" to binary (1 for "Yes", 0 for "No")
+test_results["Alzheimers"] = test_results["Ground Truth"].map({"Yes": 1, "No": 0})
+test_results["Predicted Alzheimers"] = test_results["Prediction"].map({"Yes": 1, "No": 0})
+
+# Calculate the F1 score
+adam_f1 = f1_score(test_results["Alzheimers"], test_results["Predicted Alzheimers"])
+adam_auc = roc_auc_score(test_results["Alzheimers"], test_results["Predicted Alzheimers"])
+adam_accuracy = accuracy_score(test_results["Alzheimers"], test_results["Predicted Alzheimers"])
+
+print(f"F1 Score: {adam_f1:.4f} | AUC: {adam_auc:.4f} | Accuracy: {adam_accuracy:.4f}")
+
+output_path = "output"
+
+adam_measures_path = f"{output_path}{os.sep}adam_experiment{experiment_number:02d}_measures.csv"
+if output_path and not os.path.exists(output_path):
+    os.makedirs(output_path)
+    
+adam_measures = ["adam", seed, experiment_number, adam_accuracy, adam_auc, adam_f1]
+
+# Create a DataFrame with appropriate column names
+columns = ["Model", "Seed", "Experiment_Number", "Accuracy", "AUC", "F1_Score"]
+adam_measures_df = pd.DataFrame([adam_measures], columns=columns)
+adam_measures_df.to_csv(adam_measures_path, index=False)
+adam_measures_df
+
+# base_model_4o
+# adam	441301073	12	0.666667	0.666667	0.642857
+
+
+# In[172]:
+
+
+pred_results
+
+
+# In[173]:
+
+
+# Extract only the desired columns from test_results
+adam_results = test_results[['Sample ID', 'Alzheimers', 'Predicted Alzheimers']]
+
+# Perform an inner join on 'Sample ID'
+test_xgb_adam_df = pd.merge(pred_results, adam_results, how='inner', on='Sample ID')
+test_xgb_adam_df
+
+
+# In[174]:
+
+
+adam_auc = roc_auc_score(test_xgb_adam_df['Alzheimers'], test_xgb_adam_df['Predicted Alzheimers'])
+adam_auc
+
+
+# In[175]:
+
+
+xgb_auc = roc_auc_score(test_xgb_adam_df['XGB True Label'], test_xgb_adam_df['XGB Predicted Binary'])
+xgb_auc
+
+
+# In[176]:
+
+
+measures_df
+
+
+# In[177]:
+
+
+measures_df.to_json(orient="records")  # Example of a valid orientation
+
+
+# In[178]:
+
+
+adam_measures_df
+
+
+# In[179]:
+
+
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+# Ensure the "Alzheimers" and "Predicted Alzheimers Status" columns are in binary format
+# Calculate the confusion matrix
+cm = confusion_matrix(test_results["Alzheimers"], test_results["Predicted Alzheimers"])
+
+# Display the confusion matrix
+print("Confusion Matrix:")
+print(cm)
+
+# Optional: Visualize the confusion matrix
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["No", "Yes"])
+disp.plot(cmap="Blues")
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
